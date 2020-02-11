@@ -3,17 +3,14 @@ package rpc
 import rpc.Infer.ConstraintResults
 
 object Equation {
+  // Equations are just tuples
   type TpeEq = (Tpe, Tpe)
   type LocEq = (TypedLocation, TypedLocation)
 
-  case class UnifyError(tup: (Any, Any))
-      extends RuntimeException(s"Cannot unify ${tup._1} and ${tup._2}")
-
-  case class TpeUnifyResult(tpeSub: List[TpeEq], locAcc: List[LocEq])
-
-  def substitute[A](target: A,
-                    replacement: A,
-                    list: List[(A, A)]): List[(A, A)] = {
+  /**
+    * @return simple substitution of elements in a tupled list
+    */
+  def swap[A](target: A, replacement: A, list: List[(A, A)]): List[(A, A)] = {
     list.map {
       case (l, r) =>
         (if (l == target) replacement else l,
@@ -21,12 +18,32 @@ object Equation {
     }
   }
 
-  //  https://papl.cs.brown.edu/2016/Type_Inference.html
+  /**
+    * Result of unifying types.
+    *
+    * Type unification does not just result in a substitution list (tpeSub),
+    * but also creates extra constraints on locations, e.g., when unifying two
+    * @param tpeSub
+    * @param locAcc
+    */
+  case class TpeUnifyResult(tpeSub: List[TpeEq], locAcc: List[LocEq])
+
+  /**
+    * @param tpeEqs
+    * @return Unified type equations (start from https://papl.cs.brown.edu/2016/Type_Inference.html)
+    */
   def unifyTpes(tpeEqs: List[TpeEq]): TpeUnifyResult = {
     val T = rpc.Tpe
 
     /**
-      * eliminate from tpeEqs by recording in substitution
+      * eliminate FROM tpeEqs by recording TO substitution list
+      *   (while maintaining location information)
+      *
+      * work towards minimizing tpeEqs (in length and in structure of Types)
+      *   equations with just a variable on the lhs are moved to the substitution list
+      *   extra constraints regarding locations is recorded, e.g.,
+      *     case (T.Fun(la, lloc, lb), T.Fun(ra, rloc, rb))
+      *
       */
     def helper(tpeEqs: List[TpeEq], acc: TpeUnifyResult): TpeUnifyResult = {
       tpeEqs match {
@@ -34,13 +51,22 @@ object Equation {
         case tpeEq :: tpeEqsRest =>
           tpeEq match {
             case (l @ T.Var(_), r) =>
-              // substitution can create more equations in acc
-              val roughTpeSub = substitute(l, r, acc.tpeSub)
+              /* Required for proper propagation in unification:
+
+              All swaps to the substitution list that result in equations that do *not*
+                have variables on the lhs should be unified.
+
+              e.g., (x0, Fun(...)) with acc: (x0, Fun(...))
+              will be substituted to:
+                (Fun(....), Fun(...))
+              and requires unification, so add back to tpeEqs
+               */
+              val roughTpeSub = swap(l, r, acc.tpeSub)
               val (stableSub, newEqs) = roughTpeSub.partition {
                 case (T.Var(_), _) => true
                 case _             => false
               }
-              helper(substitute(l, r, tpeEqsRest) ++ newEqs,
+              helper(swap(l, r, tpeEqsRest) ++ newEqs,
                      acc.copy(tpeSub = tpeEq :: stableSub))
 
             // trivial
@@ -73,8 +99,7 @@ object Equation {
         case leq :: locEqsRest =>
           leq match {
             case (l @ TypedLocation.Var(_), r) =>
-              helper(substitute(l, r, locEqsRest),
-                     leq :: substitute(l, r, locSub))
+              helper(swap(l, r, locEqsRest), leq :: swap(l, r, locSub))
             case (l, r @ TypedLocation.Var(_)) =>
               helper((r, l) :: locEqsRest, locSub)
             case (_, _) => helper(locEqsRest, locSub)
@@ -85,9 +110,6 @@ object Equation {
     helper(locEqs, List.empty).toMap
   }
 
-  def unify(constraints: ConstraintResults) = {
-    val tpeUni  = Equation.unifyTpes(constraints.tpeEqs.toList)
-    val locSubs = Equation.unifyLocs(tpeUni.locAcc ++ constraints.locEqs.toList)
-  }
-
+  case class UnifyError(tup: (Any, Any))
+      extends RuntimeException(s"Cannot unify ${tup._1} and ${tup._2}")
 }

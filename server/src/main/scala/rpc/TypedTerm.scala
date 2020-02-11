@@ -34,6 +34,11 @@ object TypedTerm {
     }
   }
 
+  // Pretty print implementations
+
+  /**
+    * Show instance for pretty printing
+    */
   object PrettyShow extends Show[TypedTerm] {
     override def show(t: TypedTerm): String = t match {
       case Const(i)  => s"C$i"
@@ -45,6 +50,9 @@ object TypedTerm {
     }
   }
 
+  /**
+    * Show instance for pretty printing with type ascriptions on lambda arguments
+    */
   object PrettyTypedShow extends Show[TypedTerm] {
     override def show(t: TypedTerm): String = t match {
       case App(loc, fun, param) =>

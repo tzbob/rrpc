@@ -27,7 +27,8 @@ class InferTest extends AnyFunSuite {
 
   test("Unify locations from fun type comparisons") {
     val term = Infer.infer(λˢ('f, 'f.v apply 1) apply (λᶜ('x, 'x)))
-    println(TypedTerm.PrettyTypedShow.show(term))
+//    println(TypedTerm.PrettyTypedShow.show(term))
+
     val result =
       TypedTerm.App(
         TypedLocation.Location(Location.Server),

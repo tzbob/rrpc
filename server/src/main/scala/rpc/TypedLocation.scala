@@ -6,8 +6,7 @@ sealed trait TypedLocation {
 
 object TypedLocation {
   case class Var(id: Int) extends TypedLocation {
-    val superscript =s"ˣ$id"
-    override def toString: String = s"TLVar$id"
+    val superscript = s"ˣ$id"
   }
   case class Location(loc: rpc.Location) extends TypedLocation {
     val superscript = loc.superscript

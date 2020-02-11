@@ -2,6 +2,16 @@ package rpc
 
 object Infer {
 
+  /**
+    * 1. Generate constraints (typed term, type equations, location equations)
+    * 2. Unify type equations
+    * 3. Unify location equations (from 1. and the extra from 2.)
+    * 4. Apply type and location substitution to 1.'s typed term to create
+    * the fully typed term
+    *
+    * @param term
+    * @return
+    */
   def infer(term: Term): TypedTerm = {
     val constraints = generateConstraints(0, term, Map.empty)
     val tpeUni      = Equation.unifyTpes(constraints.tpeEqs.toList)
@@ -10,12 +20,21 @@ object Infer {
   }
 
   type TpeEnv = Map[String, Tpe]
+
   case class ConstraintResults(typedTerm: TypedTerm,
                                tpe: Tpe,
                                tpeEqs: Set[(Tpe, Tpe)],
                                locEqs: Set[(TypedLocation, TypedLocation)],
                                id: Int)
 
+  /**
+    * Generate all constraints from the given term,
+    *   from https://github.com/kwanghoon/rpcexample
+    * @param id
+    * @param term
+    * @param env
+    * @return
+    */
   def generateConstraints(id: Int, term: Term, env: TpeEnv): ConstraintResults =
     term match {
       case t @ Term.Const(_) =>
@@ -61,24 +80,4 @@ object Infer {
                           bResult.locEqs,
                           bResult.id)
     }
-  /*
-
-5) Propagate process
-- Left-hand type of each equation has different variables on the right-hand side of the equation
-Replace with the right-hand side that matches the left-hand type variable when it appears
-
-a1 = int -c-> int
-l5 = c
-a4 = int
-a2 = int
-l3 = c
-In this example, you don't have to repeat it anymore.
-In general, 3)~5) As a result of a new equation created during the process,
-There are instances where it has to be repeated.
-6) Equation with substTerm shall be prepared in the genCst step.
-Replace typed term with skeletons and replace it with complete typed term.
-To complete.
--}
- */
-
 }
