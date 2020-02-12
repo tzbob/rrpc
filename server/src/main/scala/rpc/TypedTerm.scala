@@ -15,9 +15,13 @@ object TypedTerm {
   case class App(loc: TypedLocation, fun: TypedTerm, param: TypedTerm)
       extends TypedTerm
 
-  def substitute(typedTerm: TypedTerm,
-                 tpeSub: Map[Tpe, Tpe],
-                 locSub: Map[TypedLocation, TypedLocation]): TypedTerm = {
+  // Only used at runtime, how to model?
+  case class Closure(lam: Lam, env: Map[String, TypedTerm]) extends TypedTerm
+
+  def applyTypeSubstitution(
+      typedTerm: TypedTerm,
+      tpeSub: Map[Tpe, Tpe],
+      locSub: Map[TypedLocation, TypedLocation]): TypedTerm = {
     def subOrKeep[A](a: A, map: Map[A, A]): A = map.get(a).getOrElse(a)
     typedTerm match {
       case Const(_) => typedTerm
@@ -26,11 +30,11 @@ object TypedTerm {
         Lam(l,
             name,
             subOrKeep(argTpe, tpeSub),
-            substitute(bTpe, tpeSub, locSub))
+            applyTypeSubstitution(bTpe, tpeSub, locSub))
       case App(tl, fun, param) =>
         App(subOrKeep(tl, locSub),
-            substitute(fun, tpeSub, locSub),
-            substitute(param, tpeSub, locSub))
+            applyTypeSubstitution(fun, tpeSub, locSub),
+            applyTypeSubstitution(param, tpeSub, locSub))
     }
   }
 
@@ -47,6 +51,8 @@ object TypedTerm {
         s"(${show(fun)}) ${loc.superscript}(${show(param)})"
       case Lam(location, name, _, body) =>
         s"λ${location.superscript}$name. ${show(body)}"
+      case Closure(lam, env) =>
+        s"[$env]${show(lam)}"
     }
   }
 

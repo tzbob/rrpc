@@ -76,7 +76,7 @@ object Equation {
             case (l @ T.Int, r @ T.Var(_)) =>
               helper((r, l) :: tpeEqsRest, acc)
             case (l @ T.Fun(_, _, _), r @ T.Var(_)) =>
-              helper((l, r) :: tpeEqsRest, acc)
+              helper((r, l) :: tpeEqsRest, acc)
             case (T.Fun(la, lloc, lb), T.Fun(ra, rloc, rb)) =>
               helper((la, ra) :: (lb, rb) :: tpeEqsRest,
                      acc.copy(locAcc = (lloc, rloc) :: acc.locAcc))

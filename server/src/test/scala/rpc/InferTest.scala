@@ -25,6 +25,23 @@ class InferTest extends AnyFunSuite {
           TypedTerm.Const(5)))
   }
 
+  test("Infer identity through identity") {
+    val term = Infer.infer(λᶜ('x, 'x) apply λˢ('y, 'y))
+    assert(
+      term ===
+        TypedTerm.App(
+          TypedLocation.Location(Location.Client),
+          TypedTerm.Lam(Location.Client,
+                        "x",
+                        Tpe.Fun(Tpe.Var(1),
+                                TypedLocation.Location(Location.Server),
+                                Tpe.Var(1)),
+                        TypedTerm.Var("x")),
+          TypedTerm.Lam(Location.Server, "y", Tpe.Var(1), TypedTerm.Var("y"))
+        )
+    )
+  }
+
   test("Unify locations from fun type comparisons") {
     val term = Infer.infer(λˢ('f, 'f.v apply 1) apply (λᶜ('x, 'x)))
 //    println(TypedTerm.PrettyTypedShow.show(term))
