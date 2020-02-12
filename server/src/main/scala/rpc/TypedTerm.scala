@@ -18,6 +18,14 @@ object TypedTerm {
   // Only used at runtime, how to model?
   case class Closure(lam: Lam, env: Map[String, TypedTerm]) extends TypedTerm
 
+  def traverse(typedTerm: TypedTerm): Stream[TypedTerm] =
+    typedTerm #:: (typedTerm match {
+      case Lam(_, _, _, body)   => traverse(body)
+      case Closure(lam, _)      => traverse(lam)
+      case App(loc, fun, param) => traverse(fun) #::: traverse(param)
+      case x                    => Stream.empty
+    })
+
   def applyTypeSubstitution(
       typedTerm: TypedTerm,
       tpeSub: Map[Tpe, Tpe],
