@@ -2,7 +2,7 @@ package rpc
 
 import cats.Show
 
-trait TypedTerm
+sealed trait TypedTerm
 
 object TypedTerm {
   case class Const(i: Int)     extends TypedTerm
@@ -16,7 +16,8 @@ object TypedTerm {
       extends TypedTerm
 
   // Only used at runtime, how to model?
-  case class Closure(lam: Lam, env: Map[String, TypedTerm]) extends TypedTerm
+  case class Closure(lam: TypedTerm, env: Map[String, TypedTerm])
+      extends TypedTerm
 
   def traverse(typedTerm: TypedTerm): Stream[TypedTerm] =
     typedTerm #:: (typedTerm match {
@@ -25,6 +26,36 @@ object TypedTerm {
       case App(loc, fun, param) => traverse(fun) #::: traverse(param)
       case x                    => Stream.empty
     })
+
+  def freeVariables(interTerm: TypedTerm): List[TypedTerm.Var] = {
+    def helper(interTerm: TypedTerm,
+               bounded: Set[TypedTerm.Var]): List[TypedTerm.Var] = {
+      interTerm match {
+        case v @ Var(name) => if (bounded contains v) Nil else List(v)
+        case Const(i)      => Nil
+        case Lam(location, name, argumentType, body) =>
+          helper(body, bounded + Var(name))
+        case App(loc, fun, param) =>
+          helper(fun, bounded) ::: helper(param, bounded)
+      }
+    }
+    helper(interTerm, Set.empty)
+  }
+
+  def substitute(t: TypedTerm,
+                 target: TypedTerm,
+                 replacement: TypedTerm): TypedTerm = {
+    val sub = substitute(_, target, replacement)
+    if (t == target) replacement
+    else
+      t match {
+        case App(loc, fun, param) => App(loc, sub(fun), sub(param))
+        case Lam(location, name, argumentType, body) =>
+          Lam(location, name, argumentType, sub(body))
+        case Closure(lam, env) => Closure(sub(lam), env)
+        case x                 => x
+      }
+  }
 
   def applyTypeSubstitution(
       typedTerm: TypedTerm,

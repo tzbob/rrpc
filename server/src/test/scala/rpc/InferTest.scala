@@ -1,6 +1,7 @@
 package rpc
 
 import org.scalatest.funsuite.AnyFunSuite
+import rpc.Equation.UnifyError
 
 class InferTest extends AnyFunSuite {
   import Dsl._
@@ -72,13 +73,22 @@ class InferTest extends AnyFunSuite {
   }
 
   test("Paper example p.5") {
+    val x = λˢ('f, λˢ('x, 'x)('f.v apply 1))
+
     val term = Infer.infer(
-      λˢ('f, λˢ('x, 'x)('f.v apply 1)) apply (λc('y, λs('z, 'z) apply 'y))
+      λˢ('f, λˢ('x, 'x)('f.v apply 1)) apply λc('y, λs('z, 'z) apply 'y)
     )
 
     assert(
       TypedTerm.PrettyShow
         .show(term) === "(λˢf. (λˢx. x) ˢ((f) ᶜ(C1))) ˢ(λᶜy. (λˢz. z) ˢ(y))")
+  }
+
+  test("Regression test #1: term from stackoverflow") {
+    val stacktest = λᶜ('xyz, 'xyz) apply λᶜ('x, 'x.v apply 'x) apply λᶜ('x, 'x) apply 5
+    intercept[UnifyError] {
+      Infer.infer(stacktest)
+    }
   }
 
 }

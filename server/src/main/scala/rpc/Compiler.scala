@@ -34,7 +34,7 @@ object Compiler {
         val (fid, fVar) = makeVar(anfId, "f")
         val (xid, xVar) = makeVar(anfId, "x")
 
-        val body = clientSpecifics(anfId, loc, fVar, xVar)
+        val body = tierSpecifics(anfId, loc, fVar, xVar)
         postParamId -> ST.Let(fid, compFun, ST.Let(xid, compParam, body))
     }
   }

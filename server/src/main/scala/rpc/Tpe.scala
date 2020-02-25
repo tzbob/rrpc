@@ -9,6 +9,13 @@ object Tpe {
   case class Var(id: Int)                            extends Tpe
   case class Fun(a: Tpe, loc: TypedLocation, b: Tpe) extends Tpe
 
+  def all(tpe: Tpe): Stream[Tpe] =
+    tpe #:: (tpe match {
+      case Fun(a, loc, b) =>
+        all(a) #::: all(b)
+      case x => Stream(x)
+    })
+
   implicit object PrettyTpe extends Show[Tpe] {
     override def show(t: Tpe): String = t match {
       case Int            => "Int"

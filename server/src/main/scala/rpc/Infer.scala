@@ -16,7 +16,9 @@ object Infer {
     val constraints = generateConstraints(0, term, Map.empty)
     val tpeUni      = Equation.unifyTpes(constraints.tpeEqs.toList)
     val locSub      = Equation.unifyLocs(tpeUni.locAcc ++ constraints.locEqs.toList)
-    TypedTerm.applyTypeSubstitution(constraints.typedTerm, tpeUni.tpeSub.toMap, locSub)
+    TypedTerm.applyTypeSubstitution(constraints.typedTerm,
+                                    tpeUni.tpeSub.toMap,
+                                    locSub)
   }
 
   type TpeEnv = Map[String, Tpe]

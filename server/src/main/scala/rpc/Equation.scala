@@ -51,6 +51,9 @@ object Equation {
         case tpeEq :: tpeEqsRest =>
           tpeEq match {
             case (l @ T.Var(_), r) =>
+              // occurs check (recursive types unsupported)
+              if (Tpe.all(r).toSet.contains(l)) throw UnifyError(tpeEq)
+
               /* Required for proper propagation in unification:
 
               All swaps to the substitution list that result in equations that do *not*
