@@ -1,6 +1,9 @@
 package rpc
 
-trait Location { def superscript: String }
+import io.circe.generic.JsonCodec
+
+@JsonCodec
+sealed trait Location { def superscript: String }
 
 object Location {
   case object Server extends Location { val superscript = "ˢ" }

@@ -1,15 +1,17 @@
 package rpc
 
+import io.circe.generic.JsonCodec
+
 sealed trait InterTerm
 
 object InterTerm {
-  case class Const(i: Int)                 extends InterTerm
-  case class Var(idx: Int, namepp: String) extends InterTerm
+  case class Const(i: Int) extends InterTerm
+
+  @JsonCodec case class LamRef(id: Int, loc: Location) extends InterTerm
+  @JsonCodec case class Var(idx: Int)                  extends InterTerm
   object Var {
-    def fromTVar(typedTerm: TypedTerm.Var, idx: Int): Var =
-      Var(idx, typedTerm.name)
+    def fromTVar(typedTerm: TypedTerm.Var, idx: Int): Var = Var(idx)
   }
-  case class LamRef(id: Int, loc: Location) extends InterTerm
   case class App(loc: TypedLocation, fun: InterTerm, param: InterTerm)
       extends InterTerm
 
@@ -26,7 +28,7 @@ object InterTerm {
                location: Location,
                typedTerm: TypedTerm): (Int, InterTerm, LamStore) = {
       def nameToVar(name: String) =
-        InterTerm.Var(bruijnEnv.lastIndexOf(name), name)
+        InterTerm.Var(bruijnEnv.lastIndexOf(name))
       typedTerm match {
         case TypedTerm.Const(i)  => (id, InterTerm.Const(i), Map.empty)
         case TypedTerm.Var(name) => (id, nameToVar(name), Map.empty)
@@ -37,7 +39,7 @@ object InterTerm {
           val closedLam = ClosedLam(
             id,
             newBody,
-            InterTerm.Var(bruijnEnv.size, name),
+            InterTerm.Var(bruijnEnv.size),
             TypedTerm.freeVariables(typedTerm).map(x => nameToVar(x.name)))
           (newId, ref, (lamStore + (ref -> closedLam)))
         case TypedTerm.App(l, fun, param) =>

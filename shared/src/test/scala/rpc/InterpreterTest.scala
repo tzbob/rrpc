@@ -4,6 +4,7 @@ import cats.effect.IO
 import rpc.InterTerm.{ClosedLam, LamRef}
 import rpc.Interpreter._
 import rpc.Location.Client
+import rpc.Value.Closure
 
 class InterpreterTest extends org.scalatest.FunSuite {
   import Dsl._
@@ -15,8 +16,8 @@ class InterpreterTest extends org.scalatest.FunSuite {
     assert(
       store(InterTerm.LamRef(0, Location.Server)) === ClosedLam(
         0,
-        InterTerm.Var(0, "test"),
-        InterTerm.Var(0, "test"),
+        InterTerm.Var(0),
+        InterTerm.Var(0),
         Nil))
     assert(ref === InterTerm.LamRef(0, Location.Server))
   }
@@ -47,40 +48,44 @@ class InterpreterTest extends org.scalatest.FunSuite {
     }
     assert(stackTestResult.unsafeRunSync() === Value.Const(999))
   }
-//
-//  test("Interpreter should continue after a server response") {
-//    val identityToConst =
-//      λc('cid, 'cid.v) apply (λs('id, 'id) apply λc('test, 'test))
-//
-//    val inferred      = Infer.infer(identityToConst)
-//    val (term, store) = Interpreter.compileForInterpreter(inferred)
-//
-//    var usedServer = false
-//    val stackTestResult = Interpreter.runClient(term, store) { x =>
-//      IO {
-//        usedServer = true
-//        x.variables.head // only 1 value and the server is the id function
-//      }
-//    }
-//    assert(
-//      stackTestResult.unsafeRunSync() === InterTerm.LamRef(2, Location.Client))
-//    assert(usedServer)
-//  }
+
+  test("Interpreter should continue after a server response") {
+    val identityToConst =
+      λc('cid, 'cid.v) apply (λs('id, 'id) apply λc('test, 'test))
+
+    val inferred      = Infer.infer(identityToConst)
+    val (term, store) = InterTerm.compileForInterpreter(inferred)
+
+    var usedServer = false
+    val stackTestResult = Interpreter.runClient(term, store) { x =>
+      IO {
+        usedServer = true
+        x.bound
+      }
+    }
+    assert(
+      stackTestResult.unsafeRunSync() === Closure(LamRef(2, Location.Client),
+                                                  Map.empty))
+    assert(usedServer)
+  }
 //
 //  // TODO: test free variables
 //  // TODO: test case where free values with the same name overwrite outside the closure
 //
-//  test("Interpreter should continue after an actual server response") {
-//    val identityToConst =
-//      λc('cid, 'cid.v) apply (λs('id, 'id) apply λc('test, 'test))
-//
-//    val inferred      = Infer.infer(identityToConst)
-//    val (term, store) = Interpreter.compileForInterpreter(inferred)
-//
-//    val stackTestResult =
-//      Interpreter.runClient[IO](term, store)(Interpreter.requestResponder[IO](store))
-//
-//    assert(
-//      stackTestResult.unsafeRunSync() === InterTerm.LamRef(2, Location.Client))
-//  }
+  test("Interpreter should continue after an actual server response") {
+    val identityToConst =
+      λc('cid, 'cid.v) apply (λs('id, 'id) apply λc('test, 'test))
+
+    val inferred      = Infer.infer(identityToConst)
+    val (term, store) = InterTerm.compileForInterpreter(inferred)
+
+    val stackTestResult =
+      Interpreter.runClient[IO](term, store) { callInfo =>
+        IO { Interpreter.performServerRequest(store, callInfo).getOrElse(???) }
+      }
+
+    assert(
+      stackTestResult.unsafeRunSync() === Closure(LamRef(2, Location.Client),
+                                                  Map.empty))
+  }
 }
