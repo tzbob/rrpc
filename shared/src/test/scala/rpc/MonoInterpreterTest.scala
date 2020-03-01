@@ -9,11 +9,11 @@ class MonoInterpreterTest extends AnyFunSuite {
   //    println(trace.map(TypedTerm.PrettyShow.show))
 
   test("Identity function") {
-    val constId = MonoInterpreter.interpret(λᶜ('x, 'x) apply 5)
+    val constId = MonoInterpreter.interpret(λᶜ("x", "x") apply 5)
     assert(constId === TypedTerm.Const(5))
 
     val idIdInt =
-      MonoInterpreter.interpret((λᶜ('x, 'x) apply λˢ('y, 'y)) apply 4)
+      MonoInterpreter.interpret((λᶜ("x", "x") apply λˢ("y", "y")) apply 4)
     assert(idIdInt === TypedTerm.Const(4))
   }
 

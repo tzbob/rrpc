@@ -12,14 +12,14 @@ class InferTest extends AnyFunSuite {
 //    assert(Infer.infer(Term.Var("hello")) === TypedTerm.Var("hello")) should error!
 
     assert(
-      Infer.infer(Ls('x, 'x)(5)) ===
+      Infer.infer(Ls("x", "x")(5)) ===
         TypedTerm.App(
           TypedLocation.Location(Location.Server),
           TypedTerm.Lam(Location.Server, "x", Tpe.Int, TypedTerm.Var("x")),
           TypedTerm.Const(5)))
 
     assert(
-      Infer.infer(Ls('x, 'x)(5)) ===
+      Infer.infer(Ls("x", "x")(5)) ===
         TypedTerm.App(
           TypedLocation.Location(Location.Server),
           TypedTerm.Lam(Location.Server, "x", Tpe.Int, TypedTerm.Var("x")),
@@ -27,7 +27,7 @@ class InferTest extends AnyFunSuite {
   }
 
   test("Infer identity through identity") {
-    val term = Infer.infer(λᶜ('x, 'x) apply λˢ('y, 'y))
+    val term = Infer.infer(λᶜ("x", "x") apply λˢ("y", "y"))
     assert(
       term ===
         TypedTerm.App(
@@ -44,7 +44,7 @@ class InferTest extends AnyFunSuite {
   }
 
   test("Unify locations from fun type comparisons") {
-    val term = Infer.infer(λˢ('f, 'f.v apply 1) apply (λᶜ('x, 'x)))
+    val term = Infer.infer(λˢ("f", "f".v apply 1) apply (λᶜ("x", "x")))
 //    println(TypedTerm.PrettyTypedShow.show(term))
 
     val result =
@@ -73,10 +73,10 @@ class InferTest extends AnyFunSuite {
   }
 
   test("Paper example p.5") {
-    val x = λˢ('f, λˢ('x, 'x)('f.v apply 1))
+    val x = λˢ("f", λˢ("x", "x")("f".v apply 1))
 
     val term = Infer.infer(
-      λˢ('f, λˢ('x, 'x)('f.v apply 1)) apply λc('y, λs('z, 'z) apply 'y)
+      λˢ("f", λˢ("x", "x")("f".v apply 1)) apply λc("y", λs("z", "z") apply "y")
     )
 
     assert(
@@ -85,7 +85,9 @@ class InferTest extends AnyFunSuite {
   }
 
   test("Regression test #1: term from stackoverflow") {
-    val stacktest = λᶜ('xyz, 'xyz) apply λᶜ('x, 'x.v apply 'x) apply λᶜ('x, 'x) apply 5
+    val stacktest = λᶜ("xyz", "xyz") apply λᶜ("x", "x".v apply "x") apply λᶜ(
+      "x",
+      "x") apply 5
     intercept[UnifyError] {
       Infer.infer(stacktest)
     }

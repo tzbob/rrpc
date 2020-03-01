@@ -27,22 +27,6 @@ object Interpreter {
                Value,
                Cont[Value]) => Either[ExternalCall, Value]
 
-  def runClient[F[_]: Async](term: Term)(
-      request: CallInfo => F[Value]): F[Value] =
-    runClient(Infer.infer(term))(request)
-
-  def runClient[F[_]: Async](typedTerm: TypedTerm)(
-      request: CallInfo => F[Value]): F[Value] = {
-    val (term, store) = InterTerm.compileForInterpreter(typedTerm)
-    runClient(term, store)(request)
-  }
-
-  def runClient[F[_]: Async](term: InterTerm, store: LamStore)(
-      request: CallInfo => F[Value]): F[Value] =
-    runClient(term, store, Map.empty) { info =>
-      request(info).map(x => Right.apply(x): Either[CallInfo, Value])
-    }(???)
-
   def runClient[F[_]: Async](term: InterTerm,
                              store: LamStore,
                              env: Map[InterTerm.Var, Value])(
