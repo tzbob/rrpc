@@ -9,7 +9,7 @@ object Simple extends RpcApp with RpcAppInt {
   val port = 8080
 
   def rpc(args: List[String]): Term = {
-    λs("sf", λc("sf", "sf") apply 5) apply 0
+    λc("x", 20) apply (λs("sf", λc("sf", "sf") apply 5) apply 0)
   }
 
 }

@@ -2,7 +2,6 @@ import sbtcrossproject.CrossPlugin.autoImport.crossProject
 
 val http4sVersion = "0.21.0"
 ThisBuild / scalaVersion := "2.13.1"
-ThisBuild / isDevMode := true
 
 lazy val root = project
   .in(file("."))
@@ -34,6 +33,7 @@ lazy val rpcJVM = rpc.jvm
   .settings(
     // Add JVM-specific settings here
     scalaJSProjects := Seq(rpcJS),
+    devCommands in scalaJSPipeline += "~reStart",
     pipelineStages in Assets := Seq(scalaJSPipeline),
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-dsl"          % http4sVersion,

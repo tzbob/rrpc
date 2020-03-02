@@ -66,7 +66,7 @@ object ServerEvaluator {
         case req @ GET -> Root / "assets" / "client.js" =>
           // StaticFile.fromResource[IO]("test.html", blocker, Some(req)).getOrElseF(NotFound())
           StaticFile
-            .fromFile(new File("../js/target/scala-2.13/rpc-opt.js"),
+            .fromFile(new File("../js/target/scala-2.13/rpc-fastopt.js"),
                       blocker,
                       Some(req))
             .getOrElseF(NotFound())

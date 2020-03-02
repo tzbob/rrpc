@@ -15,7 +15,7 @@ trait RpcApp extends RpcAppInt {
     ClientEvaluator
       .buildClientRun(store, term, uri"http://$hostname:$port")
       .map { x =>
-        println(x)
+        println(s"Result: $x")
         document.getElementById("result").innerHTML = x.toString
         ExitCode.Success
       }
