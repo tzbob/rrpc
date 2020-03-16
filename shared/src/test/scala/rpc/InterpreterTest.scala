@@ -1,67 +1,66 @@
 package rpc
 
 import cats.effect.IO
-import rpc.InterTerm.{ClosedLam, LamRef, LamStore}
+import rpc.Expr.Closed
+import rpc.Expr.Closed.{ClosedLam, LamRef}
+import rpc.Expr.Open._
 import rpc.Interpreter._
-import rpc.Location.Client
 import rpc.Value.Closure
-
-import scala.collection.mutable
 
 class InterpreterTest extends org.scalatest.FunSuite {
   import Dsl._
 
+  val tInt = Tpe.Data("Int", Nil)
+
   test("Interpreter should add a function to the function store") {
-    val id           = λˢ("test", "test")
-    val (ref, store) = InterTerm.compileForInterpreter(Infer.infer(id))
+    val id           = λˢ('t', tInt)('t')
+    val (ref, store) = Closed.compileForInterpreter(id)
 
     assert(
-      store(InterTerm.LamRef(0, Location.Server)) === ClosedLam(
-        0,
-        InterTerm.Var(0),
-        InterTerm.Var(0),
-        Nil))
-    assert(ref === InterTerm.LamRef(0, Location.Server))
+      store(Closed.LamRef(0, s)) === ClosedLam(0,
+                                               Closed.Var("t"),
+                                               Closed.Var("t"),
+                                               Nil))
+    assert(ref === Closed.LamRef(0, s))
   }
 
   test("Interpreter should have unique ids for function store") {
-    val identityToConst = λc("f", "f".v apply 5) apply λc("x", "x")
-    val inferred        = Infer.infer(identityToConst)
-    val (term, store)   = InterTerm.compileForInterpreter(inferred)
+    val identityToConst = λc('f', tInt)('f'.v(Lit(5), c))(λc('x', tInt)('x'), c)
+    val (term, store)   = Closed.compileForInterpreter(identityToConst)
 
-    assert(store.keys === Set(LamRef(0, Client), LamRef(1, Client)))
+    assert(store.keys === Set(LamRef(0, c), LamRef(1, c)))
   }
 
-  val testEff = IO.pure(Right(Value.Const(999): Value): Either[CallInfo, Value])
+  val testEff =
+    IO.pure(Right(Value.Constant(999): Value): Either[CallInfo, Value])
   test("Interpreter should interpret client side function completely") {
-    val identityToConst = λc("f", "f".v apply 5) apply λc("x", "x")
-    val inferred        = Infer.infer(identityToConst)
-    val (term, store)   = InterTerm.compileForInterpreter(inferred)
+    val identityToConst = λc('f', tInt)('f'.v(Lit(5), c)) apply (λc('x', tInt)(
+      'x'), c)
+    val (term, store) = Closed.compileForInterpreter(identityToConst)
     val stackTestResult = Interpreter.runClient(term, store, Map.empty) { _ =>
       testEff
     }(_ => ???)
-    assert(stackTestResult.unsafeRunSync() === Value.Const(5))
+    assert(stackTestResult.unsafeRunSync() === Value.Constant(5))
   }
 
   test("Interpreter should create a server deferral for server requests") {
-    val identityToConst = λc("f", "f".v apply 5) apply λs("x", "x")
+    val identityToConst = λc('f', tInt)('f'.v apply (Lit(5), s)) apply (λs(
+      'x',
+      tInt)('x'), c)
 
-    val inferred      = Infer.infer(identityToConst)
-    val (term, store) = InterTerm.compileForInterpreter(inferred)
+    val (term, store) = Closed.compileForInterpreter(identityToConst)
     val stackTestResult = Interpreter.runClient(term, store, Map.empty) { x =>
-      assert(
-        x === CallInfo(LamRef(1, Location.Server), Value.Const(5), Seq.empty))
+      assert(x === CallInfo(LamRef(1, s), Value.Constant(5), Seq.empty))
       testEff
     }(_ => ???)
-    assert(stackTestResult.unsafeRunSync() === Value.Const(999))
+    assert(stackTestResult.unsafeRunSync() === Value.Constant(999))
   }
 
   test("Interpreter should continue after a server response") {
     val identityToConst =
-      λc("cid", "cid".v) apply (λs("id", "id") apply λc("test", "test"))
+      λc('c', tInt)('c'.v) apply (λs('i', tInt)('i') apply (λc('t', tInt)('t'), s), c)
 
-    val inferred      = Infer.infer(identityToConst)
-    val (term, store) = InterTerm.compileForInterpreter(inferred)
+    val (term, store) = Closed.compileForInterpreter(identityToConst)
 
     var usedServer = false
     val stackTestResult = Interpreter.runClient(term, store, Map.empty) { x =>
@@ -71,7 +70,7 @@ class InterpreterTest extends org.scalatest.FunSuite {
       }
     }(_ => ???)
     assert(
-      stackTestResult.unsafeRunSync() === Closure(LamRef(2, Location.Client),
+      stackTestResult.unsafeRunSync() === Closure(Right(LamRef(2, c)),
                                                   Map.empty))
     assert(usedServer)
   }
@@ -81,44 +80,25 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
   test("Interpreter should continue after an actual server response") {
     val identityToConst =
-      λc("cid", "cid".v) apply (λs("id", "id") apply λc("test", "test"))
+      λc('c', tInt)('c'.v) apply ((λs('i', tInt)('i') apply (λc('t', tInt)('t'), s)), c)
 
-    val stackTestResult = fullRun(identityToConst)
+    val stackTestResult = TestRunner.fullRun(identityToConst)
 
     assert(
-      stackTestResult.unsafeRunSync() === Closure(LamRef(2, Location.Client),
+      stackTestResult.unsafeRunSync() === Closure(Right(LamRef(2, c)),
                                                   Map.empty))
   }
-
-  def fullRun(term: Term): IO[Value] = {
-    val inferred           = Infer.infer(term)
-    val (interTerm, store) = InterTerm.compileForInterpreter(inferred)
-    val q                  = mutable.Queue[Cont[Value]]()
-
-    def qExternal(either: Either[ExternalCall, Value]) = {
-      val cinfo = for {
-        test <- either.swap
-      } yield {
-        q.enqueue(test.cont)
-        test.callInfo
-      }
-      cinfo.swap
-    }
-
-    Interpreter.runClient[IO](interTerm, store, Map.empty) { callInfo =>
-      IO(qExternal(Interpreter.performServerRequest(store, callInfo)))
-    } { value =>
-      IO(qExternal(Interpreter.handleClientResponse[IO](store, value, q)))
-    }
-  }
-
   test("Interpreter should reply to simple server requests") {
-    val callToClient = λs("sf", λc("sf", "sf") apply "sf") apply 5
-    assert(fullRun(callToClient).unsafeRunSync() === Value.Const(5))
+    val callToClient = λs('s', tInt)(λc('s', tInt)('s') apply ('s', s)) apply (Lit(
+      5), s)
+    assert(
+      TestRunner.fullRun(callToClient).unsafeRunSync() === Value.Constant(5))
   }
 
   test("Interpreter should properly deal with shadowed variables") {
-    val callToClient = λs("sf", λc("sf", "sf") apply 5) apply 0
-    assert(fullRun(callToClient).unsafeRunSync() === Value.Const(5))
+    val callToClient = λs('s', tInt)(λc('s', tInt)('s') apply (Lit(5), s)) apply (Lit(
+      0), s)
+    assert(
+      TestRunner.fullRun(callToClient).unsafeRunSync() === Value.Constant(5))
   }
 }

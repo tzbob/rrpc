@@ -1,7 +1,6 @@
 package rpc
 
 import cats.effect.IO
-import rpc.InterTerm.LamRef
 import rpc.Interpreter._
 import rpc.Value.Closure
 

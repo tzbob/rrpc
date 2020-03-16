@@ -36,6 +36,7 @@ lazy val rpcJVM = rpc.jvm
     // Add JVM-specific settings here
     scalaJSProjects := Seq(rpcJS),
     devCommands in scalaJSPipeline += "~reStart",
+    devCommands in scalaJSPipeline += "~testQuick",
     pipelineStages in Assets := Seq(scalaJSPipeline),
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-dsl"          % http4sVersion,

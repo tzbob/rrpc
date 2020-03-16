@@ -12,15 +12,15 @@ import scala.io.Source
 
 trait RpcApp extends RpcAppInt {
   override def run(args: List[String]): IO[ExitCode] = {
-    val typed      = Infer.infer(rpc(args))
-    val (_, store) = InterTerm.compileForInterpreter(typed)
+
+    val (closedExpr, store) = Expr.Closed.compileForInterpreter(rpc(args))
 
     val resource = for {
       blocker <- Blocker[IO]
       server <- BlazeServerBuilder[IO]
         .bindHttp(port, hostname)
         .withHttpApp(Router(
-          "/" -> ServerEvaluator.buildRoutes(typed, store, blocker)).orNotFound)
+          "/" -> ServerEvaluator.buildRoutes(closedExpr, store, blocker)).orNotFound)
         .resource
     } yield server
 

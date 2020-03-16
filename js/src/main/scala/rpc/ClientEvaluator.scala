@@ -2,7 +2,7 @@ package rpc
 
 import cats.effect.{ContextShift, ExitCode, IO, IOApp}
 import io.circe.{Decoder, Encoder}
-import rpc.InterTerm.LamStore
+import rpc.Expr.Closed.LamStore
 import rpc.Interpreter.CallInfo
 import sttp.client._
 import sttp.client.circe._
@@ -33,9 +33,9 @@ object ClientEvaluator {
     }
   }
 
-  def buildClientRun(store: LamStore, term: InterTerm, uri: Uri)(
+  def buildClientRun(store: LamStore, expr: Expr.Closed.Expr, uri: Uri)(
       implicit ctx: ContextShift[IO]): IO[Value] = {
-    Interpreter.runClient(term, store, Map.empty)(
+    Interpreter.runClient(expr, store, Map.empty)(
       caller[CallInfo](uri"$uri/interpret"))(caller[Value](uri"$uri/continue"))
   }
 }
