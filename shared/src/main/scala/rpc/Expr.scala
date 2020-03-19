@@ -2,34 +2,40 @@ package rpc
 
 import cats.syntax.functor._
 import io.circe.generic.JsonCodec
-import io.circe.{Decoder, DecodingFailure, HCursor}
-import rpc.Expr.Open
-
-trait ExprData {
-  sealed trait Expr
-
-  case class Var(name: String) extends Expr
-  case class App(fun: Expr, param: Expr, location: Option[Location])
-      extends Expr
-  case class TypeAbs(strs: List[String], expr: Expr)                extends Expr
-  case class LocAbs(strs: List[String], expr: Expr)                 extends Expr
-  case class TypeApp(expr: Expr, tpes: List[Tpe])                   extends Expr
-  case class LocApp(expr: Expr, locs: List[Location])               extends Expr
-  case class Tup(list: List[Expr])                                  extends Expr
-  case class Prim(op: Operator, args: List[Expr])                   extends Expr
-  case class Lit(literal: Literal)                                  extends Expr
-  case class Constructor(name: String, tpes: List[Tpe], expr: Expr) extends Expr
+import io.circe.{
+  Decoder,
+  DecodingFailure,
+  Encoder,
+  HCursor,
+  KeyDecoder,
+  KeyEncoder
 }
-
 object Expr {
 
-  object Open extends ExprData {
+  object Open {
+    sealed trait Expr
+
+    case class Var(name: String) extends Expr
+    case class App(fun: Expr, param: Expr, location: Option[Location])
+        extends Expr
+    case class TypeAbs(strs: List[String], expr: Expr)  extends Expr
+    case class LocAbs(strs: List[String], expr: Expr)   extends Expr
+    case class TypeApp(expr: Expr, tpes: List[Tpe])     extends Expr
+    case class LocApp(expr: Expr, locs: List[Location]) extends Expr
+    case class Tup(list: List[Expr])                    extends Expr
+    case class Prim(op: Operator, args: List[Expr])     extends Expr
+    case class Lit(literal: Literal)                    extends Expr
+    case class Constructor(name: String, tpes: List[Tpe], expr: List[Expr])
+        extends Expr
     case class Case(expr: Expr, alts: List[Alternative[Open.Expr]]) extends Expr
-    case class Let(binding: Declaration.Binding[Open.Expr], expr: Expr)
+    case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
         extends Expr
     case class Abs(abss: List[(String, Tpe, Location)], expr: Expr) extends Expr
 
-    private implicit val prioritizedLocationDecoder: Decoder[Location] = Location.locD
+    private implicit val prioritizedLocationDecoder: Decoder[Location] =
+      Location.locD
+    private implicit val prioritizedOpDecoder: Decoder[Operator] =
+      Operator.opDImpl
 
     private implicit val exprVarD: Decoder[Var] = (c: HCursor) =>
       c.downField("Var").as[String].map(Var.apply)
@@ -43,7 +49,7 @@ object Expr {
         .map(Abs.tupled)
     private implicit val exprLetD: Decoder[Let] = (c: HCursor) =>
       c.downField("Let")
-        .as[(Declaration.Binding[Open.Expr], Expr)]
+        .as[(List[Declaration.Binding[Open.Expr]], Expr)]
         .map(Let.tupled)
     private implicit val exprCaseD: Decoder[Case] = (c: HCursor) =>
       c.downField("Case")
@@ -61,7 +67,7 @@ object Expr {
       c.downField("Lit").as[Literal].map(Lit)
     private implicit val exprDataD: Decoder[Constructor] = (c: HCursor) =>
       c.downField("Constr")
-        .as[(String, List[Tpe], Expr)]
+        .as[(String, List[Tpe], List[Expr])]
         .map(Constructor.tupled)
     private implicit val exprAppD: Decoder[App] = (c: HCursor) => {
       implicit val optionSome: Decoder[Option[Location]] = {
@@ -82,15 +88,15 @@ object Expr {
         exprTypeAbsD.widen,
         exprLocAbsD.widen,
         exprAbsD.widen,
-        exprLetD.widen,
         exprCaseD.widen,
         exprTypeAppD.widen,
         exprLocAppD.widen,
         exprTupD.widen,
-        exprPrimD.widen,
         exprLitD.widen,
         exprDataD.widen,
         exprAppD.widen,
+        exprLetD.widen,
+        exprPrimD.widen,
       ).reduceLeft(_ or _)
 
     def freeVariables(interTerm: Open.Expr): List[Open.Var] = {
@@ -101,8 +107,15 @@ object Expr {
             helper(a, bounded) ::: helper(b, bounded)
           case Open.TypeAbs(_, expr) => helper(expr, bounded)
           case Open.LocAbs(_, expr)  => helper(expr, bounded)
-          case Open.Let(Declaration.Binding(name, _, bExpr), expr) =>
-            helper(bExpr, bounded) ::: helper(expr, bounded + Var(name))
+          case Open.Let(bindings, expr) =>
+            val frees = bindings.flatMap {
+              case Declaration.Binding(_, _, exprB) =>
+                helper(exprB, bounded)
+            }
+            val newBounded = bindings.foldLeft(bounded) { (acc, b) =>
+              acc + Var(b.name)
+            }
+            frees ::: helper(expr, newBounded)
           case Open.Case(expr, alts) =>
             helper(expr, bounded) ::: alts.flatMap {
               case Alternative(_, params, expr) =>
@@ -118,9 +131,11 @@ object Expr {
             args.flatMap { a =>
               helper(a, bounded)
             }
-          case Open.Lit(_)                  => Nil
-          case Open.Constructor(_, _, expr) => helper(expr, bounded)
-          // FIXME: more than 1 abstraction possible?
+          case Open.Lit(_) => Nil
+          case Open.Constructor(_, _, exprs) =>
+            exprs.flatMap { expr =>
+              helper(expr, bounded)
+            }
           case Abs(List((name, _, _)), expr) =>
             helper(expr, bounded + Open.Var(name))
         }
@@ -129,21 +144,47 @@ object Expr {
     }
   }
 
-  object Closed extends ExprData {
+  object Closed {
+    sealed trait Expr
+    case class Var(name: String) extends Expr
+    case class App(fun: Expr, param: Expr, location: Option[Location])
+        extends Expr
+    case class TypeAbs(strs: List[String], expr: Expr)  extends Expr
+    case class LocAbs(strs: List[String], expr: Expr)   extends Expr
+    case class TypeApp(expr: Expr, tpes: List[Tpe])     extends Expr
+    case class LocApp(expr: Expr, locs: List[Location]) extends Expr
+    case class Tup(list: List[Expr])                    extends Expr
+    case class Prim(op: Operator, args: List[Expr])     extends Expr
+    case class Lit(literal: Literal)                    extends Expr
+    case class Constructor(name: String, tpes: List[Tpe], expr: List[Expr])
+        extends Expr
     case class Case(expr: Expr, alts: List[Alternative[Closed.Expr]])
         extends Expr
-    case class Let(binding: Declaration.Binding[Closed.Expr], expr: Expr)
+    case class Let(binding: List[Declaration.Binding[Closed.Expr]], expr: Expr)
         extends Expr
     @JsonCodec case class LamRef(id: Int, loc: Location) extends Expr
-    @JsonCodec case class LibRef(name: String) extends Expr
+    @JsonCodec case class LibRef(name: String)           extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
                          boundedVar: Closed.Var,
-                         freeVars: Seq[Closed.Var])
+                         freeVars: List[Closed.Var])
 
     type LamStore = Map[LamRef, Closed.ClosedLam]
 
-    def compileForInterpreter(typedTerm: Open.Expr): (Closed.Expr, LamStore) = {
+    import io.circe.generic.auto._
+    import io.circe.syntax._
+    import io.circe.parser.decode
+    implicit val keyLamRefEncoder = new KeyEncoder[Closed.LamRef] {
+      override def apply(key: Closed.LamRef): String = key.asJson.noSpaces
+    }
+
+    implicit val keyLamRefDecoder = new KeyDecoder[Closed.LamRef] {
+      override def apply(key: String): Option[Closed.LamRef] =
+        decode[Closed.LamRef](key).toOption
+    }
+
+    def compileForInterpreter(typedTerm: Open.Expr,
+                              startStore: LamStore): (Closed.Expr, LamStore) = {
       def helper(id: Int,
                  typedTerm: Open.Expr): (Int, Closed.Expr, LamStore) = {
         def buildExprList(list: List[Open.Expr]) = {
@@ -161,21 +202,21 @@ object Expr {
             (pId, Closed.App(fC, pC, l), fStore ++ pStore)
           case Open.TypeAbs(_, expr) => helper(id, expr)
           case Open.LocAbs(_, expr)  => helper(id, expr)
-          case Open.Let(Declaration.Binding(n, t, bExpr), expr) =>
-            val (bId, bC, bS) = helper(id, bExpr)
-            val (eId, eC, eS) = helper(bId, expr)
-            val let           = Closed.Let(Declaration.Binding(n, t, bC), eC)
-            (eId, let, bS ++ eS)
+          case Open.Let(bindings, expr) =>
+            val (nLs, nId, nList) = buildExprList(bindings.map(_.expr))
+            val newBindings =
+              nList.zip(bindings).map { case (e, b) => b.copy(expr = e) }
+
+            val (eId, eC, eS) = helper(nId, expr)
+            val let           = Closed.Let(newBindings, eC)
+
+            (eId, let, nLs ++ eS)
           case Open.Case(expr, alts) =>
-            val (eId, eC, eS) = helper(id, expr)
-            val (ls, finalId, altsC) =
-              alts.foldLeft(
-                (eS, eId, List.empty[Alternative[Expr.Closed.Expr]])) {
-                case ((store, accId, acc), Alternative(n, p, expr)) =>
-                  val (i, e, ls) = helper(accId, expr)
-                  (ls ++ store, i, acc :+ Alternative(n, p, e))
-              }
-            (finalId, Closed.Case(eC, altsC), ls)
+            val (ls, altId, altExprs) = buildExprList(alts.map(_.expr))
+            val (eId, eC, eS)         = helper(altId, expr)
+            val newAlts =
+              altExprs.zip(alts).map { case (e, a) => a.copy(expr = e) }
+            (eId, Closed.Case(eC, newAlts), ls ++ eS)
           case Open.TypeApp(expr, tpes) =>
             val (i, eC, ls) = helper(id, expr)
             (i, Closed.TypeApp(eC, tpes), ls)
@@ -189,11 +230,10 @@ object Expr {
             val (ls, id, nargs) = buildExprList(args)
             (id, Closed.Prim(op, nargs), ls)
           case Open.Lit(literal) => (id, Closed.Lit(literal), Map.empty)
-          case Open.Constructor(name, tpes, expr) =>
-            val (i, c, ls) = helper(id, expr)
-            (i, Closed.Constructor(name, tpes, c), ls)
+          case Open.Constructor(name, tpes, exprs) =>
+            val (ls, id, nExprs) = buildExprList(exprs)
+            (id, Closed.Constructor(name, tpes, nExprs), ls)
           case Open.Var(name) => (id, Closed.Var(name), Map.empty)
-          // FIXME: multiple abstractions
           case Open.Abs(List((name, _, newLoc)), expr) =>
             val ref = LamRef(id, newLoc)
             val (newId, newBody, lamStore) =
@@ -207,8 +247,10 @@ object Expr {
         }
       }
 
-      val (_, term, store) = helper(0, typedTerm)
-      (term, store)
+      val startId =
+        startStore.keys.map(_.id).toList.sorted.lastOption.getOrElse(0)
+      val (_, term, store) = helper(startId, typedTerm)
+      (term, startStore ++ store)
     }
   }
 }

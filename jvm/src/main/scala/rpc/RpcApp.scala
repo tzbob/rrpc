@@ -13,7 +13,7 @@ import scala.io.Source
 trait RpcApp extends RpcAppInt {
   override def run(args: List[String]): IO[ExitCode] = {
 
-    val (closedExpr, store) = Expr.Closed.compileForInterpreter(rpc(args))
+    val (closedExpr, store) = Expr.Closed.compileForInterpreter(rpc(args), LamStore.empty)
 
     val resource = for {
       blocker <- Blocker[IO]

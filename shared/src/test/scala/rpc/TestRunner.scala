@@ -9,9 +9,9 @@ import scala.collection.mutable
 
 object TestRunner {
   def fullRun(term: Open.Expr): IO[Value] = {
-    val (interTerm, store) = Closed.compileForInterpreter(term)
+    val (interTerm, store) = Closed.compileForInterpreter(term, LamStore.empty)
     val (cf, vf)           = fullRunIOFunctions(store)
-    Interpreter.runClient[IO](interTerm, store, Map.empty)(cf)(vf)
+    Interpreter.runClient[IO](interTerm, store, Env.empty)(cf)(vf)
   }
 
   def fullRunIOFunctions(store: LamStore) = {

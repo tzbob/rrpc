@@ -1,5 +1,6 @@
 package rpc
 
+import io.circe.generic.JsonCodec
 import io.circe.{Decoder, HCursor}
 
 case class Alternative[E](name: String, params: List[String], expr: E)

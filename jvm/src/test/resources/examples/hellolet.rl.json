@@ -1,0 +1,12 @@
+[{"LibDeclTopLevel": ["print",
+                      {"LocAbsType": [["l"],
+                                      {"FunType": [{"ConType": ["String", []]}, {"LocVar": "l"},
+                                                   {"ConType": ["Unit", []]}]}]}]},
+ {"DataTypeTopLevel": ["Unit", [], []]},
+ {"DataTypeTopLevel": ["Int", [], []]},
+ {"DataTypeTopLevel": ["Bool", [], [["True", []], ["False", []]]]},
+ {"DataTypeTopLevel": ["String", [], []]},
+ {"BindingTopLevel": ["main", {"ConType": ["Int", []]},
+                      {"Let": [[["x", {"ConType": ["Int", []]},
+                                 {"Lit": {"IntLit": 20}}]],
+                               {"Var": "x"}]}]}]

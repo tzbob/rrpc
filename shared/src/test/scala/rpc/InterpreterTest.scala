@@ -14,7 +14,7 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
   test("Interpreter should add a function to the function store") {
     val id           = λˢ('t', tInt)('t')
-    val (ref, store) = Closed.compileForInterpreter(id)
+    val (ref, store) = Closed.compileForInterpreter(id, LamStore.empty)
 
     assert(
       store(Closed.LamRef(0, s)) === ClosedLam(0,
@@ -26,7 +26,7 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
   test("Interpreter should have unique ids for function store") {
     val identityToConst = λc('f', tInt)('f'.v(Lit(5), c))(λc('x', tInt)('x'), c)
-    val (term, store)   = Closed.compileForInterpreter(identityToConst)
+    val (term, store)   = Closed.compileForInterpreter(identityToConst, LamStore.empty)
 
     assert(store.keys === Set(LamRef(0, c), LamRef(1, c)))
   }
@@ -36,8 +36,8 @@ class InterpreterTest extends org.scalatest.FunSuite {
   test("Interpreter should interpret client side function completely") {
     val identityToConst = λc('f', tInt)('f'.v(Lit(5), c)) apply (λc('x', tInt)(
       'x'), c)
-    val (term, store) = Closed.compileForInterpreter(identityToConst)
-    val stackTestResult = Interpreter.runClient(term, store, Map.empty) { _ =>
+    val (term, store) = Closed.compileForInterpreter(identityToConst, LamStore.empty)
+    val stackTestResult = Interpreter.runClient(term, store, Env.empty) { _ =>
       testEff
     }(_ => ???)
     assert(stackTestResult.unsafeRunSync() === Value.Constant(5))
@@ -48,8 +48,8 @@ class InterpreterTest extends org.scalatest.FunSuite {
       'x',
       tInt)('x'), c)
 
-    val (term, store) = Closed.compileForInterpreter(identityToConst)
-    val stackTestResult = Interpreter.runClient(term, store, Map.empty) { x =>
+    val (term, store) = Closed.compileForInterpreter(identityToConst, LamStore.empty)
+    val stackTestResult = Interpreter.runClient(term, store, Env.empty) { x =>
       assert(x === CallInfo(LamRef(1, s), Value.Constant(5), Seq.empty))
       testEff
     }(_ => ???)
@@ -60,10 +60,10 @@ class InterpreterTest extends org.scalatest.FunSuite {
     val identityToConst =
       λc('c', tInt)('c'.v) apply (λs('i', tInt)('i') apply (λc('t', tInt)('t'), s), c)
 
-    val (term, store) = Closed.compileForInterpreter(identityToConst)
+    val (term, store) = Closed.compileForInterpreter(identityToConst, LamStore.empty)
 
     var usedServer = false
-    val stackTestResult = Interpreter.runClient(term, store, Map.empty) { x =>
+    val stackTestResult = Interpreter.runClient(term, store, Env.empty) { x =>
       IO {
         usedServer = true
         Right(x.bound): Either[CallInfo, Value]
@@ -71,12 +71,9 @@ class InterpreterTest extends org.scalatest.FunSuite {
     }(_ => ???)
     assert(
       stackTestResult.unsafeRunSync() === Closure(Right(LamRef(2, c)),
-                                                  Map.empty))
+                                                  Env.empty))
     assert(usedServer)
   }
-
-  // TODO: test free variables
-  // TODO: test case where free values with the same name overwrite outside the closure
 
   test("Interpreter should continue after an actual server response") {
     val identityToConst =
@@ -86,7 +83,7 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
     assert(
       stackTestResult.unsafeRunSync() === Closure(Right(LamRef(2, c)),
-                                                  Map.empty))
+                                                  Env.empty))
   }
   test("Interpreter should reply to simple server requests") {
     val callToClient = λs('s', tInt)(λc('s', tInt)('s') apply ('s', s)) apply (Lit(

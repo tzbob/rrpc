@@ -21,7 +21,7 @@ lazy val rpc = crossProject(JSPlatform, JVMPlatform)
     version := "0.1-SNAPSHOT",
     libraryDependencies ++= Seq(
       "org.typelevel"     %%% "cats-effect"              % "2.1.1",
-      "com.lihaoyi"       %%% "pprint"                   % "0.5.6",
+    "com.lihaoyi"       %%% "pprint"                   % "0.5.6",
       "io.circe"          %%% "circe-core"               % "0.12.3",
       "io.circe"          %%% "circe-parser"             % "0.12.3",
       "io.circe"          %%% "circe-generic"            % "0.12.3",
@@ -37,7 +37,7 @@ lazy val rpcJVM = rpc.jvm
     scalaJSProjects := Seq(rpcJS),
     devCommands in scalaJSPipeline += "~reStart",
     devCommands in scalaJSPipeline += "~testQuick",
-    pipelineStages in Assets := Seq(scalaJSPipeline),
+    // pipelineStages in Assets := Seq(scalaJSPipeline),
     libraryDependencies ++= Seq(
       "org.http4s" %% "http4s-dsl"          % http4sVersion,
       "org.http4s" %% "http4s-blaze-server" % http4sVersion,

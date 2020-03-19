@@ -1,6 +1,7 @@
 package rpc
 
 import cats.syntax.functor._
+import io.circe.generic.JsonCodec
 import io.circe.{Decoder, DecodingFailure, HCursor}
 
 sealed trait Literal

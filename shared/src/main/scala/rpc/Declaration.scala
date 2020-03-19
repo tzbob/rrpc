@@ -1,6 +1,7 @@
 package rpc
 
 import cats.syntax.functor._
+import io.circe.generic.JsonCodec
 import io.circe.{Decoder, HCursor}
 import rpc.Expr.Closed.LamStore
 import rpc.Expr.{Closed, Open}
@@ -26,8 +27,9 @@ object Declaration {
     case class Library(name: String, tpe: Tpe)       extends TopLevel
 
     def compileBinding(
-        b: TopLevel.Binding[Open.Expr]): (Binding[Expr.Closed.Expr], LamStore) = {
-      val (newExpr, store) = Closed.compileForInterpreter(b.b.expr)
+        b: TopLevel.Binding[Open.Expr],
+        lamStore: LamStore): (Binding[Expr.Closed.Expr], LamStore) = {
+      val (newExpr, store) = Closed.compileForInterpreter(b.b.expr, lamStore)
       Binding(Declaration.Binding(b.b.name, b.b.tpe, newExpr)) -> store
     }
 
@@ -41,7 +43,7 @@ object Declaration {
       c.downField("LibDeclTopLevel").as[(String, Tpe)].map(Library.tupled)
 
     implicit val tlD: Decoder[TopLevel] =
-      List[Decoder[TopLevel]](tlBindingD.widen, tlDataTypeD.widen, tlLibD.widen)
+      List[Decoder[TopLevel]](tlLibD.widen, tlDataTypeD.widen, tlBindingD.widen)
         .reduceLeft(_ or _)
   }
 

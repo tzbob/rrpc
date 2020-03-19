@@ -84,27 +84,4 @@ class TpeTest extends AnyFunSuite {
 
     assert(result === Right(target))
   }
-
-  implicit val config =
-    PolyRpcCaller.Config("jvm/src/test/resources/examples", "rl")
-
-  test("Test Full Hello World Run") {
-    val jsonLoad = PolyRpcCaller.load("helloworld")
-    val decls    = decode[List[TopLevel]](jsonLoad)
-
-    val test = decls.toOption.get.foldLeft(IO.pure(Map.empty[Closed.Var, Value])) {
-      (accIO, dec) =>
-        accIO.flatMap { acc =>
-          Interpreter.processDeclaration(dec, acc) { store =>
-            val (c, v) = TestRunner.fullRunIOFunctions(store)
-            RequestReplyF(c, v)
-          }
-        }
-    }.unsafeRunSync()
-
-    pprint.log(test)
-
-    assert(test === 1)
-  }
-
 }
