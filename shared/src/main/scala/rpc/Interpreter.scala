@@ -34,6 +34,15 @@ object Interpreter {
       requestF: CallInfo => F[Either[CallInfo, Value]],
       replyF: Value => F[Either[CallInfo, Value]])
 
+  def runDeclarations[F[_]: Async](decls: List[TopLevel])(
+      asyncFuns: LamStore => RequestReplyF[F]): F[Env] = {
+    decls.foldLeft(Async[F].pure(Env.empty)) { (accIO, dec) =>
+      accIO.flatMap { acc =>
+        Interpreter.processDeclaration(dec, acc)(asyncFuns)
+      }
+    }
+  }
+
   def processDeclaration[F[_]: Async](decl: TopLevel, env: Env)(
       asyncFuns: LamStore => RequestReplyF[F]): F[Env] = {
     decl match {
@@ -195,7 +204,7 @@ object Interpreter {
 
       case lr @ Closed.LamRef(_, _) => cont(Closure(Right(lr), env))
       case lr @ Closed.LibRef(_)    => cont(Closure(Left(lr), env))
-      case a@Closed.App(fun, param, Some(locV)) =>
+      case a @ Closed.App(fun, param, Some(locV)) =>
         pprint.log(locV)
         pprint.log(env.locs)
         pprint.log(a)

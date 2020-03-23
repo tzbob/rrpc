@@ -1,6 +1,7 @@
 package rpc
 
 import cats.effect.IO
+import io.circe
 import io.circe.parser._
 import org.scalatest.funsuite.AnyFunSuite
 import rpc.Declaration.TopLevel
@@ -15,14 +16,10 @@ class FullExprTest extends AnyFunSuite {
     val jsonLoad = PolyRpcCaller.load(file, reset)
     val decls    = decode[List[TopLevel]](jsonLoad)
 
-    val result = decls.toOption.get
-      .foldLeft(IO.pure(Env.empty)) { (accIO, dec) =>
-        accIO.flatMap { acc =>
-          Interpreter.processDeclaration(dec, acc) { store =>
-            val (c, v) = TestRunner.fullRunIOFunctions(store)
-            RequestReplyF(c, v)
-          }
-        }
+    val result = Interpreter
+      .runDeclarations(decls.toOption.get) { store =>
+        val (c, v) = TestRunner.fullRunIOFunctions(store)
+        RequestReplyF(c, v)
       }
       .unsafeRunSync()
     assert(result.values.contains("main"))
