@@ -200,8 +200,12 @@ object Expr {
             val (fId, fC, fStore) = helper(id, fun)
             val (pId, pC, pStore) = helper(fId, param)
             (pId, Closed.App(fC, pC, l), fStore ++ pStore)
-          case Open.TypeAbs(_, expr) => helper(id, expr)
-          case Open.LocAbs(_, expr)  => helper(id, expr)
+          case Open.TypeAbs(strs, expr) =>
+            val (eId, eC, eStore) = helper(id, expr)
+            (eId, Closed.TypeAbs(strs, eC), eStore)
+          case Open.LocAbs(strs, expr) =>
+            val (eId, eC, eStore) = helper(id, expr)
+            (eId, Closed.LocAbs(strs, eC), eStore)
           case Open.Let(bindings, expr) =>
             val (nLs, nId, nList) = buildExprList(bindings.map(_.expr))
             val newBindings =

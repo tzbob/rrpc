@@ -63,7 +63,6 @@ class FullExprTest extends AnyFunSuite {
     assert(result.values("main") === Constant(Literal.Int(20)))
   }
 
-  // TODO: Parser bug -> case as last expression in a program
   test("Test head (multiple constructor, case)") {
     import Value._
     val result = runProgram("head")
@@ -84,6 +83,12 @@ class FullExprTest extends AnyFunSuite {
       runProgram("operators").values("main") === Constant(Literal.Bool(true)))
   }
 
+  test("Test Recursive Values") {
+    import Value._
+
+    val result = runProgram("count")
+    assert(result.values("main") === Constant(Literal.Int(3)))
+  }
   test("Test Recursive Values + Case + Constructor") {
     import Value._
 

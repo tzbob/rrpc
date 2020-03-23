@@ -108,6 +108,7 @@ object Interpreter {
                                        env: Env,
                                        localLoc: Location.Loc)(
       cont: Cont[Value]): Either[ExternalCall, Value] = {
+
     def combinedCpsInterpret(results: List[Closed.Expr])(
         cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
       def helper(values: List[Value], results: List[Closed.Expr])(
@@ -128,8 +129,8 @@ object Interpreter {
 
       case Closed.TypeApp(expr, tpes) =>
         cpsInterpretGeneral(expr, store, env, localLoc) {
-          case TpeClosure(abs, body, _) =>
-            val extendedEnv = abs.zip(tpes).foldLeft(env) {
+          case TpeClosure(abs, body, closedEnv) =>
+            val extendedEnv = abs.zip(tpes).foldLeft(closedEnv) {
               case (acc, (name, tpe)) =>
                 acc.add(name, tpe)
             }
@@ -138,8 +139,8 @@ object Interpreter {
         }
       case Closed.LocApp(expr, locs) =>
         cpsInterpretGeneral(expr, store, env, localLoc) {
-          case LocClosure(abs, body, _) =>
-            val extendedEnv = abs.zip(locs).foldLeft(env) {
+          case LocClosure(abs, body, closedEnv) =>
+            val extendedEnv = abs.zip(locs).foldLeft(closedEnv) {
               case (acc, (name, loc)) =>
                 acc.add(name, loc)
             }
@@ -188,18 +189,21 @@ object Interpreter {
       case Closed.Var(name) =>
         env.value(name) match {
           case None =>
-            env.recurse(name) match {
-              case None => throw new RuntimeException(s"$name not found.")
-              case Some(expr) =>
-                cpsInterpretGeneral(expr, store, env, localLoc)(cont)
-            }
+            cpsInterpretGeneral(env.recursive(name), store, env, localLoc)(cont)
           case Some(v) => cont(v)
         }
-//        cont(env.value(name))
 
       case lr @ Closed.LamRef(_, _) => cont(Closure(Right(lr), env))
       case lr @ Closed.LibRef(_)    => cont(Closure(Left(lr), env))
-      case Closed.App(fun, param, Some(loc)) =>
+      case a@Closed.App(fun, param, Some(locV)) =>
+        pprint.log(locV)
+        pprint.log(env.locs)
+        pprint.log(a)
+        val loc = locV match {
+          case l @ Location.Loc(_) => l
+          case Location.Var(name)  => env.locs(name)
+        }
+
         cpsInterpretGeneral(fun, store, env, localLoc) {
           case Closure(ref, closedEnv) =>
             cpsInterpretGeneral(param, store, env, localLoc) { value => // evaluate param
@@ -211,13 +215,16 @@ object Interpreter {
                                         store,
                                         closedEnv.add(bounded.name, value),
                                         localLoc)(cont)
-                  else
-                    Left(
-                      ExternalCall(CallInfo(lr,
-                                            value,
-                                            free.map(v =>
-                                              closedEnv.value(v.name).get)),
-                                   cont))
+                  else {
+                    pprint.log(loc)
+                    pprint.log(localLoc)
+                    pprint.log(ref)
+                    Left(ExternalCall(CallInfo(lr, value, free.map { v =>
+                      pprint.log(v)
+                      pprint.log(closedEnv)
+                      closedEnv.value(v.name).get
+                    }), cont))
+                  }
                 case Left(Closed.LibRef(name)) =>
                   (Lib: LibInt).get(name) match {
                     case None    => throw MissingLibError(name)
