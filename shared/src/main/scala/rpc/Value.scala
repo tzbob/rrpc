@@ -1,6 +1,6 @@
 package rpc
 
-import rpc.Expr.Closed.{LamRef, LibRef}
+import rpc.Expr.Closed.{LamRef}
 import io.circe._
 import io.circe.generic.JsonCodec
 import io.circe.generic.auto._
@@ -10,14 +10,10 @@ import rpc.Expr.Closed
 @JsonCodec sealed trait Value
 
 object Value {
-  case class Constant(lit: Literal)                         extends Value
-  case class Closure(ref: Either[LibRef, LamRef], env: Env) extends Value
-  case class TpeClosure(tpeAbs: List[String], expr: Closed.Expr, env: Env)
-      extends Value
-  case class LocClosure(locAbs: List[String], expr: Closed.Expr, env: Env)
-      extends Value
+  case class Constant(lit: Literal)                      extends Value
+  case class Closure(ref: LamRef, env: Env)              extends Value
   case class Constructed(tag: String, args: List[Value]) extends Value
-  case class Tupled(args: List[Value]) extends Value
+  case class Tupled(args: List[Value])                   extends Value
 
   implicit val keyEncoder = new KeyEncoder[Expr.Closed.Var] {
     override def apply(key: Expr.Closed.Var): String = key.name

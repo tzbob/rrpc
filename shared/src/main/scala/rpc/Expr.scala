@@ -31,6 +31,7 @@ object Expr {
     case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
         extends Expr
     case class Abs(abss: List[(String, Tpe, Location)], expr: Expr) extends Expr
+    case class Native(name: String, vars: List[Var])                extends Expr
 
     private implicit val prioritizedLocationDecoder: Decoder[Location] =
       Location.locD
@@ -99,48 +100,119 @@ object Expr {
         exprPrimD.widen,
       ).reduceLeft(_ or _)
 
-    def freeVariables(interTerm: Open.Expr): List[Open.Var] = {
-      def helper(expr: Open.Expr, bounded: Set[Open.Var]): List[Open.Var] = {
-        expr match {
-          case v @ Open.Var(_) => if (bounded contains v) Nil else List(v)
-          case Open.App(a, b, _) =>
-            helper(a, bounded) ::: helper(b, bounded)
-          case Open.TypeAbs(_, expr) => helper(expr, bounded)
-          case Open.LocAbs(_, expr)  => helper(expr, bounded)
-          case Open.Let(bindings, expr) =>
-            val frees = bindings.flatMap {
-              case Declaration.Binding(_, _, exprB) =>
-                helper(exprB, bounded)
-            }
-            val newBounded = bindings.foldLeft(bounded) { (acc, b) =>
-              acc + Var(b.name)
-            }
-            frees ::: helper(expr, newBounded)
-          case Open.Case(expr, alts) =>
-            helper(expr, bounded) ::: alts.flatMap {
-              case Alternative(_, params, expr) =>
-                helper(expr, bounded ++ params.map(Open.Var.apply))
-            }
-          case Open.TypeApp(expr, _) => helper(expr, bounded)
-          case Open.LocApp(expr, _)  => helper(expr, bounded)
-          case Open.Tup(exprs) =>
-            exprs.flatMap { e =>
-              helper(e, bounded)
-            }
-          case Open.Prim(_, args) =>
-            args.flatMap { a =>
-              helper(a, bounded)
-            }
-          case Open.Lit(_) => Nil
-          case Open.Constructor(_, _, exprs) =>
-            exprs.flatMap { expr =>
-              helper(expr, bounded)
-            }
-          case Abs(List((name, _, _)), expr) =>
-            helper(expr, bounded + Open.Var(name))
-        }
+    def traversed(expr: Open.Expr): List[Open.Expr] = {
+      expr :: (expr match {
+        case Open.Var(_) => Nil
+        case Open.App(a, b, _) =>
+          traversed(a) ::: traversed(b)
+        case Open.TypeAbs(_, expr) => traversed(expr)
+        case Open.LocAbs(_, expr)  => traversed(expr)
+        case Open.Let(bindings, expr) =>
+          val traversedB = bindings.flatMap {
+            case Declaration.Binding(_, _, exprB) => traversed(exprB)
+          }
+          traversedB ::: traversed(expr)
+        case Open.Case(expr, alts) =>
+          traversed(expr) ::: alts.flatMap {
+            case Alternative(_, _, expr) => traversed(expr)
+          }
+        case Open.TypeApp(expr, _)         => traversed(expr)
+        case Open.LocApp(expr, _)          => traversed(expr)
+        case Open.Tup(exprs)               => exprs.flatMap(traversed)
+        case Open.Prim(_, args)            => args.flatMap(traversed)
+        case Open.Lit(_)                   => Nil
+        case Open.Constructor(_, _, exprs) => exprs.flatMap(traversed)
+        case Open.Native(_, vars)          => vars.flatMap(traversed)
+        case Abs(List((_, _, _)), expr)    => traversed(expr)
+      })
+    }
+
+    def freeVariablesAndLocs(
+        interTerm: Open.Expr
+    ): (List[Open.Var],
+        List[Location.Var]
+
+//      ) = {
+        ,
+        List[Open.Var]) = {
+
+      def unpackTupleList(a: List[(List[Var], List[Location.Var], List[Var])]) =
+        (a.map(_._1).flatten, a.map(_._2).flatten, a.map(_._3).flatten)
+
+      val result = traversed(interTerm).map {
+        case v @ Open.Var(_) => (Nil, Nil, List(v))
+        case Open.Let(bindings, _) =>
+          val b = bindings.map {
+            case Declaration.Binding(str, _, _) =>
+              val bound = Open.Var(str)
+              (List(bound), Nil, List(bound))
+          }
+          unpackTupleList(b)
+        case Open.LocAbs(locs, _) => (Nil, locs.map(Location.Var), Nil)
+        case Open.Case(_, alts) =>
+          val a = alts.map {
+            case Alternative(_, params, _) =>
+              val boundVars = params.map(Open.Var)
+              (boundVars, Nil, boundVars)
+          }
+          unpackTupleList(a)
+        case Open.Abs(abss, _) =>
+          val bound = abss.map { case (name, _, _) => Open.Var(name) }
+          (bound, Nil, bound)
+        case _ => (Nil, Nil, Nil)
       }
-      helper(interTerm, Set.empty)
+
+      val (bound, locs, vars) = unpackTupleList(result)
+      (bound, locs, vars.filterNot(bound.toSet))
+//      def helper(
+//          expr: Open.Expr,
+//          bounded: Set[Open.Var]): List[Either[Open.Var, Location.Var]] = {
+//        expr match {
+//          case v @ Open.Var(_) => if (bounded contains v) Nil else List(Left(v))
+//          case Open.App(a, b, _) =>
+//            helper(a, bounded) ::: helper(b, bounded)
+//          case Open.TypeAbs(_, expr) => helper(expr, bounded)
+//          case Open.LocAbs(locs, expr) =>
+//            locs
+//              .map(Location.Var)
+//              .map(Right.apply[Open.Var, Location.Var]) ::: helper(expr,
+//                                                                   bounded)
+//          case Open.Let(bindings, expr) =>
+//            val frees = bindings.flatMap {
+//              case Declaration.Binding(_, _, exprB) =>
+//                helper(exprB, bounded)
+//            }
+//            val newBounded = bindings.foldLeft(bounded) { (acc, b) =>
+//              acc + Var(b.name)
+//            }
+//            frees ::: helper(expr, newBounded)
+//          case Open.Case(expr, alts) =>
+//            helper(expr, bounded) ::: alts.flatMap {
+//              case Alternative(_, params, expr) =>
+//                helper(expr, bounded ++ params.map(Open.Var.apply))
+//            }
+//          case Open.TypeApp(expr, _) => helper(expr, bounded)
+//          case Open.LocApp(expr, _)  => helper(expr, bounded)
+//          case Open.Tup(exprs) =>
+//            exprs.flatMap { e =>
+//              helper(e, bounded)
+//            }
+//          case Open.Prim(_, args) =>
+//            args.flatMap { a =>
+//              helper(a, bounded)
+//            }
+//          case Open.Lit(_) => Nil
+//          case Open.Constructor(_, _, exprs) =>
+//            exprs.flatMap { expr =>
+//              helper(expr, bounded)
+//            }
+//          case Abs(List((name, _, _)), expr) =>
+//            helper(expr, bounded + Open.Var(name))
+//        }
+//      }
+//      val mixedList       = helper(interTerm, Set.empty)
+//      val (lefts, rights) = mixedList.partition(_.isLeft)
+//      lefts.map(_.swap.toOption.get) -> rights.map(_.toOption.get)
     }
   }
 
@@ -149,8 +221,6 @@ object Expr {
     case class Var(name: String) extends Expr
     case class App(fun: Expr, param: Expr, location: Option[Location])
         extends Expr
-    case class TypeAbs(strs: List[String], expr: Expr)  extends Expr
-    case class LocAbs(strs: List[String], expr: Expr)   extends Expr
     case class TypeApp(expr: Expr, tpes: List[Tpe])     extends Expr
     case class LocApp(expr: Expr, locs: List[Location]) extends Expr
     case class Tup(list: List[Expr])                    extends Expr
@@ -162,12 +232,18 @@ object Expr {
         extends Expr
     case class Let(binding: List[Declaration.Binding[Closed.Expr]], expr: Expr)
         extends Expr
-    @JsonCodec case class LamRef(id: Int, loc: Location) extends Expr
-    @JsonCodec case class LibRef(name: String)           extends Expr
+    case class Native(name: String, vars: List[Var]) extends Expr
+    @JsonCodec case class LamRef(id: Int)            extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
-                         boundedVar: Closed.Var,
-                         freeVars: List[Closed.Var])
+                         boundedVars: List[Closed.Var],
+                         freeVars: List[Closed.Var],
+                         tpeVars: List[Tpe.Var],
+                         locVars: List[Location.Var])
+
+    object Native {
+      def boundVariable(name: String) = Closed.Var(s"${name}_bound%%")
+    }
 
     type LamStore = Map[LamRef, Closed.ClosedLam]
 
@@ -195,17 +271,33 @@ object Expr {
           }
         }
 
+        def makeClosedLam(boundedVars: List[String],
+                          expr: Open.Expr,
+                          tpeVars: List[String],
+                          locVars: List[String]) = {
+
+          val ref                        = LamRef(id)
+          val (newId, newBody, lamStore) = helper(id + 1, expr)
+          val (bound, locs, vars)        = Open.freeVariablesAndLocs(typedTerm)
+
+          val closedLam = ClosedLam(
+            id,
+            newBody,
+            boundedVars.map(Expr.Closed.Var),
+//            bound.map(x => Closed.Var(x.name)),
+            vars.map(x => Closed.Var(x.name)),
+            tpeVars.map(Tpe.Var),
+            locVars.map(Location.Var)
+//            locs
+          )
+          (newId, ref, (lamStore + (ref -> closedLam)))
+        }
+
         typedTerm match {
           case Open.App(fun, param, l) =>
             val (fId, fC, fStore) = helper(id, fun)
             val (pId, pC, pStore) = helper(fId, param)
             (pId, Closed.App(fC, pC, l), fStore ++ pStore)
-          case Open.TypeAbs(strs, expr) =>
-            val (eId, eC, eStore) = helper(id, expr)
-            (eId, Closed.TypeAbs(strs, eC), eStore)
-          case Open.LocAbs(strs, expr) =>
-            val (eId, eC, eStore) = helper(id, expr)
-            (eId, Closed.LocAbs(strs, eC), eStore)
           case Open.Let(bindings, expr) =>
             val (nLs, nId, nList) = buildExprList(bindings.map(_.expr))
             val newBindings =
@@ -238,21 +330,19 @@ object Expr {
             val (ls, id, nExprs) = buildExprList(exprs)
             (id, Closed.Constructor(name, tpes, nExprs), ls)
           case Open.Var(name) => (id, Closed.Var(name), Map.empty)
-          case Open.Abs(List((name, _, newLoc)), expr) =>
-            val ref = LamRef(id, newLoc)
-            val (newId, newBody, lamStore) =
-              helper(id + 1, expr)
-            val closedLam = ClosedLam(
-              id,
-              newBody,
-              Closed.Var(name),
-              Open.freeVariables(typedTerm).map(x => Closed.Var(x.name)))
-            (newId, ref, (lamStore + (ref -> closedLam)))
+          case Open.Native(name, vars) =>
+            (id,
+             Closed.Native(name, vars.map(v => Closed.Var(v.name))),
+             Map.empty)
+
+          case Open.Abs(List((name, _, _)), expr) =>
+            makeClosedLam(List(name), expr, Nil, Nil)
+          case Open.TypeAbs(strs, expr) => makeClosedLam(Nil, expr, strs, Nil)
+          case Open.LocAbs(strs, expr)  => makeClosedLam(Nil, expr, Nil, strs)
         }
       }
 
-      val startId =
-        startStore.keys.map(_.id).toList.sorted.lastOption.getOrElse(0)
+      val startId          = LamStore.newRef(startStore).id
       val (_, term, store) = helper(startId, typedTerm)
       (term, startStore ++ store)
     }

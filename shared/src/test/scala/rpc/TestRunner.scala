@@ -11,7 +11,7 @@ object TestRunner {
   def fullRun(term: Open.Expr): IO[Value] = {
     val (interTerm, store) = Closed.compileForInterpreter(term, LamStore.empty)
     val (cf, vf)           = fullRunIOFunctions(store)
-    Interpreter.runClient[IO](interTerm, store, Env.empty)(cf)(vf)
+    Interpreter.runClient[IO](interTerm, Env.empty)(cf)(vf)
   }
 
   def fullRunIOFunctions(store: LamStore) = {

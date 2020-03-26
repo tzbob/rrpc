@@ -22,10 +22,14 @@ case class Env(tpes: Map[String, Tpe],
   def add(k: String, expr: Closed.Expr): Env =
     copy(recursive = recursive + (k -> expr))
 
+  def location(k: String): Option[Location]   = locs.get(k)
+  def tpe(k: String): Option[Tpe]             = tpes.get(k)
   def value(k: String): Option[Value]         = values.get(k)
   def recurse(k: String): Option[Closed.Expr] = recursive.get(k)
 
-  def mergeStore(ls: LamStore): Env = copy(lamStore = this.lamStore ++ ls)
+  def mergeStore(ls: LamStore): Env = {
+    copy(lamStore = this.lamStore ++ ls)
+  }
 }
 
 object Env {
