@@ -9,4 +9,4 @@ getOrElse : {l1}. [a]. (Option<a> -l1-> a -l1-> a)
         };
 
 main : Int
-     = getOrElse {client} [Int] (Some [Int] 20) 5
+     = getOrElse {server} [Int] (Some [Int] 20) 5

@@ -1,7 +1,5 @@
 package rpc
 
-import cats.effect.IO
-import io.circe
 import io.circe.parser._
 import org.scalatest.funsuite.AnyFunSuite
 import rpc.Declaration.TopLevel
@@ -16,7 +14,7 @@ class FullExprTest extends AnyFunSuite {
     val jsonLoad = PolyRpcCaller.load(file, reset)
     val decls    = decode[List[TopLevel]](jsonLoad)
 
-    val result = Interpreter
+    val (result, _) = Interpreter
       .runDeclarations(decls.toOption.get) { store =>
         val (c, v) = TestRunner.fullRunIOFunctions(store)
         RequestReplyF(c, v)
@@ -69,9 +67,7 @@ class FullExprTest extends AnyFunSuite {
   }
 
   test("Test missing case") {
-    intercept[CaseError] {
-      runProgram("missingcase")
-    }
+    intercept[CaseError] { runProgram("missingcase") }
   }
 
   test("Test missing operators") {
@@ -86,13 +82,29 @@ class FullExprTest extends AnyFunSuite {
     val result = runProgram("count")
     assert(result.values("main") === Constant(Literal.Int(3)))
   }
+
+  test("Cross-tier calls") {
+    import Value._
+    val result = runProgram("cross")
+    assert(result.values("main") === Constant(Literal.Int(200)))
+  }
+
   test("Test Recursive Values + Case + Constructor") {
     import Value._
 
     val result = runProgram("map")
     assert(
-      result.values("main") === Constructed("Cons",
-                                            List(Constant(Literal.Int(1)),
-                                                 Constructed("Nil", Nil))))
+      result.values("main") ===
+        Constructed(
+          "Cons",
+          List(
+            Constant(Literal.Int(1)),
+            Constructed("Cons",
+                        List(Constant(Literal.Int(2)),
+                             Constructed("Cons",
+                                         List(Constant(Literal.Int(3)),
+                                              Constructed("Nil", List())))))
+          )
+        ))
   }
 }

@@ -1,13 +1,14 @@
 package rpc
 
+import io.circe.generic.JsonCodec
 import rpc.Expr.Closed
 import rpc.Expr.Closed.LamStore
+import io.circe.generic.auto._
 
+@JsonCodec
 case class Env(tpes: Map[String, Tpe],
                locs: Map[String, Location],
-               values: Map[String, Value],
-               recursive: Map[String, Closed.Expr],
-               lamStore: LamStore) {
+               values: Map[String, Value]) {
   def add(k: String, tpe: Tpe): Env = copy(tpes = tpes + (k -> tpe))
   def add(k: String, loc: Location): Env = {
     val newLocs = locs.get(k) match {
@@ -19,20 +20,12 @@ case class Env(tpes: Map[String, Tpe],
 
   def add(k: String, value: Value): Env =
     copy(values = values + (k -> value))
-  def add(k: String, expr: Closed.Expr): Env =
-    copy(recursive = recursive + (k -> expr))
 
-  def location(k: String): Option[Location]   = locs.get(k)
-  def tpe(k: String): Option[Tpe]             = tpes.get(k)
-  def value(k: String): Option[Value]         = values.get(k)
-  def recurse(k: String): Option[Closed.Expr] = recursive.get(k)
-
-  def mergeStore(ls: LamStore): Env = {
-    copy(lamStore = this.lamStore ++ ls)
-  }
+  def location(k: String): Option[Location] = locs.get(k)
+  def tpe(k: String): Option[Tpe]           = tpes.get(k)
+  def value(k: String): Option[Value]       = values.get(k)
 }
 
 object Env {
-  val empty: Env =
-    Env(Map.empty, Map.empty, Map.empty, Map.empty, LamStore.empty)
+  val empty: Env = Env(Map.empty, Map.empty, Map.empty)
 }

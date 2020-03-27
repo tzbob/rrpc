@@ -25,16 +25,16 @@ trait LibInt {
     })
   }
 
-  def expr(name: String): LamStore => (Closed.Expr, LamStore) =
+  def expr(name: String): LamStore => (Closed.LamRef, LamStore) =
     functions.get(name) match {
       case None => throw MissingLibError(name)
       case Some((tpes, _)) =>
-        (store: LamStore) =>
-          {
-            Closed.compileForInterpreter(mkAbs(tpes) { vars =>
-              Open.Native(name, vars)
-            }, store)
-          }
+        (store: LamStore) => {
+          val (expr, nStore) = Closed.compileForInterpreter(mkAbs(tpes) { vars =>
+            Open.Native(name, vars)
+          }, store)
+          expr.asInstanceOf[Closed.LamRef] -> nStore
+        }
     }
 
   def fun(name: String): List[Value] => Value = {

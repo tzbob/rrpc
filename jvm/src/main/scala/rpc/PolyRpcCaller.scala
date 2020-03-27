@@ -14,7 +14,7 @@ object PolyRpcCaller {
   def toJsonLocation(name: String)(implicit c: Config) =
     s"${toFileLocation(name)}.json"
 
-  // FIXME: write this using non-blocking and error-handling IO
+  // TODO: write this using non-blocking and error-handling IO
   def load(name: String, reset: Boolean = false)(implicit c: Config): String = {
     val js = new File(toJsonLocation(name))
     if (reset) js.delete()

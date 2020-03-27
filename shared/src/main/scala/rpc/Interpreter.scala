@@ -7,7 +7,7 @@ import rpc.Declaration.TopLevel
 import rpc.Expr.Closed.{ClosedLam, LamRef, LamStore}
 import rpc.Expr.{Closed, Open}
 import rpc.Value._
-import rpc.error.{CaseError, MissingLibError}
+import rpc.error.{CaseError, MissingLibError, MissingValueError}
 
 import scala.collection.mutable
 
@@ -18,8 +18,9 @@ object Interpreter {
                         LamRef,
                         Closed.Expr) => F[Closed.Expr]
 
+  // FIXME: Make Env a minimal subset using freelocs/freevars!
   @JsonCodec
-  case class CallInfo(lamRef: LamRef, bound: Value, frees: Seq[Value])
+  case class CallInfo(lamRef: LamRef, bound: Value, env: Env)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
   type Cont[A] = A => Either[ExternalCall, Value]
@@ -35,33 +36,47 @@ object Interpreter {
       replyF: Value => F[Either[CallInfo, Value]])
 
   def runDeclarations[F[_]: Async](decls: List[TopLevel])(
-      asyncFuns: LamStore => RequestReplyF[F]): F[Env] = {
-    decls.foldLeft(Async[F].pure(Env.empty)) { (accIO, dec) =>
-      accIO.flatMap { acc =>
-        Interpreter.processDeclaration(dec, acc)(asyncFuns)
+      asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
+    decls.foldLeft(Async[F].pure(Env.empty -> LamStore.empty)) { (accIO, dec) =>
+      accIO.flatMap {
+        case (acc, store) =>
+          Interpreter.processDeclaration(dec, acc, store)(asyncFuns)
       }
     }
   }
 
-  def processDeclaration[F[_]: Async](decl: TopLevel, env: Env)(
-      asyncFuns: LamStore => RequestReplyF[F]): F[Env] = {
+  def processDeclaration[F[_]: Async](decl: TopLevel,
+                                      env: Env,
+                                      store: LamStore)(
+      asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
     decl match {
       case TopLevel.Library(name, _) =>
-        val (expr, store) = (Lib: LibInt).expr(name)(env.lamStore)
-        Async[F].pure(env.add(name, expr).mergeStore(store))
-      case TopLevel.DataType(_) => Async[F].pure(env)
-      case b @ TopLevel.Binding(_) =>
-        val (TopLevel.Binding(Declaration.Binding(name, _, expr)), store) =
-          Declaration.TopLevel.compileBinding(
-            b.asInstanceOf[TopLevel.Binding[Open.Expr]],
-            env.lamStore)
+        val (expr, extStore) = (Lib: LibInt).expr(name)(store)
 
-        val RequestReplyF(requestF, replyF) = asyncFuns(store)
+        val enableRecursionEnv = expr match {
+          case lr @ LamRef(_) =>
+            Closure.addRecursiveClosure(name, lr, env)
+          case _ => env
+        }
+        Async[F].pure(enableRecursionEnv -> extStore)
+      case TopLevel.DataType(_) => Async[F].pure(env -> store)
+      case b @ TopLevel.Binding(_) =>
+        val (TopLevel.Binding(Declaration.Binding(name, _, expr)), extStore) =
+          Declaration.TopLevel
+            .compileBinding(b.asInstanceOf[TopLevel.Binding[Open.Expr]], store)
+
+        val RequestReplyF(requestF, replyF) = asyncFuns(extStore)
+
+        val enableRecursionEnv = expr match {
+          case lr @ LamRef(_) => Closure.addRecursiveClosure(name, lr, env)
+          case _              => env
+        }
+
+        implicit val s = extStore
         val valueF =
-          runClient(expr, env.add(name, expr).mergeStore(store))(requestF)(
-            replyF)
+          runClient(expr, enableRecursionEnv)(requestF)(replyF)
         valueF.map { v =>
-          env.add(name, v).mergeStore(store)
+          env.add(name, v) -> extStore
         }
     }
   }
@@ -69,8 +84,8 @@ object Interpreter {
   // FIXME: Document this entire thing
   def runClient[F[_]: Async](term: Closed.Expr, env: Env)(
       requestF: CallInfo => F[Either[CallInfo, Value]])(
-      replyF: Value => F[Either[CallInfo, Value]]): F[Value] = {
-    val store = env.lamStore
+      replyF: Value => F[Either[CallInfo, Value]])(
+      implicit store: LamStore): F[Value] = {
     def interpretRequestOrValue(
         reqOrVal: Either[ExternalCall, Value]): F[Value] = {
       val performExternalCall: ExternalCall => F[Value] = {
@@ -81,18 +96,13 @@ object Interpreter {
               interpretRequestOrValue _ compose cont
 
             val continueCall: CallInfo => F[Value] = {
-              case CallInfo(lr, bound, frees) => {
+              case CallInfo(lr, bound, callEnv) => {
                 store.get(lr) match {
                   case Some(
                       Closed
-                        .ClosedLam(_, body, List(boundVar), freeVars, _, _)) =>
-                    val newValueEnv = freeVars
-                      .map(_.name)
-                      .zip(frees)
-                      .toMap + (boundVar.name -> bound)
-                    val newEnv = env.copy(values = newValueEnv)
+                        .ClosedLam(_, body, _, _, _, _, _, _)) =>
                     val result =
-                      runClient(body, newEnv)(requestF)(replyF)
+                      runClient(body, callEnv)(requestF)(replyF)
                     val responseF = Async[F].flatMap(result)(replyF)
                     interpretResponseF(responseF)
                   case None =>
@@ -116,10 +126,11 @@ object Interpreter {
     interpretRequestOrValue(valueOrExternalCall)
   }
 
-  private[rpc] def cpsInterpretGeneral(term: Closed.Expr,
-                                       env: Env,
-                                       localLoc: Location.Loc)(
-      cont: Cont[Value]): Either[ExternalCall, Value] = {
+  private[rpc] def cpsInterpretGeneral(
+      term: Closed.Expr,
+      env: Env,
+      localLoc: Location.Loc)(cont: Cont[Value])(
+      implicit store: LamStore): Either[ExternalCall, Value] = {
 
     def combinedCpsInterpret(results: List[Closed.Expr])(
         cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
@@ -135,44 +146,28 @@ object Interpreter {
       helper(Nil, results)(cont)
     }
 
-    def extendEnv[A](lookupEnv: Env, keys: List[String], extendedEnv: Env)(
-        reader: (Env, String) => Option[A])(writer: (Env, String, A) => Env) = {
-      keys
-        .map(k => reader(lookupEnv, k).map(v => k -> v))
-        .flatten
-        .foldLeft(extendedEnv) {
-          case (envAcc, (k, v)) => writer(envAcc, k, v)
-        }
-    }
-
-    val store = env.lamStore
-
-    pprint.log(env.values)
-    pprint.log(term)
-
     term match {
       case Closed.Native(name, vars) =>
         combinedCpsInterpret(vars) { vals =>
           cont((Lib: LibInt).fun(name)(vals))
         }
-      case Closed.TypeApp(expr, tpes) =>
+      case Closed.TypeApp(expr, List(tpe)) =>
         cpsInterpretGeneral(expr, env, localLoc) {
           case Closure(lr, closedEnv) =>
-            val ClosedLam(_, body, _, _, tvars, _) = store(lr)
-            val tEnv = tvars.zip(tpes).foldLeft(closedEnv) {
-              case (acc, (name, tpe)) =>
-                acc.add(name.str, tpe)
-            }
+            val ClosedLam(_, body, _, List(tvar), _, _, _, _) = store(lr)
+
+            val tEnv = closedEnv.add(tvar.str, tpe)
             cpsInterpretGeneral(body, tEnv, localLoc)(cont)
         }
-      case Closed.LocApp(expr, locs) =>
+      case Closed.LocApp(expr, List(locV)) =>
         cpsInterpretGeneral(expr, env, localLoc) {
           case Closure(lr, closedEnv) =>
-            val ClosedLam(_, body, _, _, _, lVars) = store(lr)
-            val lEnv = lVars.zip(locs).foldLeft(closedEnv) {
-              case (acc, (name, loc)) =>
-                acc.add(name.name, loc)
+            val ClosedLam(_, body, _, _, List(lvar), _, _, _) = store(lr)
+            val loc = locV match {
+              case l @ Location.Loc(_) => l
+              case Location.Var(name)  => env.locs(name)
             }
+            val lEnv = closedEnv.add(lvar.name, loc)
             cpsInterpretGeneral(body, lEnv, localLoc)(cont)
         }
       case Closed.Tup(exprs) =>
@@ -215,62 +210,64 @@ object Interpreter {
       case Closed.Lit(literal) => cont(Constant(literal))
       case Closed.Var(name) =>
         env.value(name) match {
-          case None =>
-            cpsInterpretGeneral(env.recursive(name), env, localLoc)(cont)
           case Some(v) => cont(v)
+          case None =>
+            throw MissingValueError(name, env.values)
         }
 
       // FIXME: Only close over the minimal needed environment
       case lr @ Closed.LamRef(_) => cont(Closure(lr, env))
-      case a @ Closed.App(fun, param, Some(locV)) =>
-        val loc = locV match {
-          case l @ Location.Loc(_) => l
-          case Location.Var(name)  => env.locs(name)
-        }
-
-        println(s"start interpret of fun $fun")
+      case Closed.App(fun, param, Some(locV)) =>
         cpsInterpretGeneral(fun, env, localLoc) {
           case Closure(lr, closedEnv) =>
-            println(s"start interpret of fun $param")
             cpsInterpretGeneral(param, env, localLoc) { value => // evaluate param
-              // FIXME: problem here is that bound is needed to fill up the environment.
-              //  Instead bound (or the holes in the environments could be added to lamref?
-              val Closed.ClosedLam(_, body, List(bound), free, _, _) =
+              val Closed.ClosedLam(_, body, List(bound), free, _, _, _, _) =
                 store(lr)
+
+              val loc = locV match {
+                case l @ Location.Loc(_) => l
+                case Location.Var(name)  => env.locs(name)
+              }
               if (loc == localLoc) {
                 cpsInterpretGeneral(body,
                                     closedEnv.add(bound.name, value),
                                     localLoc)(cont)
               } else {
-                Left(ExternalCall(CallInfo(lr, value, free.map { v =>
-                  closedEnv.value(v.name).get
-                }), cont))
+                Left(
+                  ExternalCall(
+                    CallInfo(
+                      lr,
+                      value,
+                      closedEnv.add(bound.name, value)
+//                      free.map { v =>
+//                        // FIXME: go through all .get's and fix it with understandable errors
+//                        closedEnv.value(v.name) match {
+//                          case Some(v) => v
+//                          case None =>
+//                            throw MissingValueError(v.name, closedEnv.values)
+//                        }
+//                      }
+                    ),
+                    cont
+                  ))
               }
             }
         }
     }
   }
 
-  def performServerRequest(store: LamStore,
-                           callInfo: CallInfo): Either[ExternalCall, Value] = {
-    val CallInfo(lr, bound, frees) = callInfo
+  def performServerRequest(callInfo: CallInfo)(
+      implicit store: LamStore): Either[ExternalCall, Value] = {
+    val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
-      case Some(Closed.ClosedLam(_, body, List(boundVar), freeVars, _, _)) =>
-        val newVEnv = freeVars
-          .map(_.name)
-          .zip(frees)
-          .toMap + (boundVar.name -> bound)
-        Interpreter.cpsInterpretGeneral(
-          body,
-          Env.empty.copy(values = newVEnv).mergeStore(store),
-          Location.server)(Right.apply)
+      case Some(Closed.ClosedLam(_, body, _, _, _, _, _, _)) =>
+        Interpreter.cpsInterpretGeneral(body, env, Location.server)(Right.apply)
       case None =>
         throw new RuntimeException(s"No $lr in store $store")
     }
   }
 
   def handleClientResponse[F[_]: Async](
-      store: LamStore,
       value: Value,
       queue: mutable.Queue[Cont[Value]]): Either[ExternalCall, Value] = {
     val cont = queue.dequeue()

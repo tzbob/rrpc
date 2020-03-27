@@ -10,8 +10,16 @@ import rpc.Expr.Closed
 @JsonCodec sealed trait Value
 
 object Value {
-  case class Constant(lit: Literal)                      extends Value
-  case class Closure(ref: LamRef, env: Env)              extends Value
+  case class Constant(lit: Literal)             extends Value
+  case class Closure(ref: LamRef, var env: Env) extends Value
+  object Closure {
+    def addRecursiveClosure(name: String, lamRef: LamRef, env: Env): Env = {
+      val closure = Closure(lamRef, null)
+      val recEnv  = env.add(name, closure)
+      closure.env = recEnv
+      recEnv
+    }
+  }
   case class Constructed(tag: String, args: List[Value]) extends Value
   case class Tupled(args: List[Value])                   extends Value
 

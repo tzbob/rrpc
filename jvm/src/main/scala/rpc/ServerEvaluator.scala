@@ -22,7 +22,8 @@ object ServerEvaluator {
     implicit val decoder  = jsonOf[IO, CallInfo]
     implicit val vencoder = jsonOf[IO, Value]
 
-    // FIXME, use IOREF or another proper construct
+    // TODO, use IOREF or another proper construct
+    // FIXME: use sessions!
     val queue = mutable.Queue[Cont[Value]]()
 
     def respond(result: Either[ExternalCall, Value]) = result match {
@@ -52,14 +53,14 @@ object ServerEvaluator {
         case req @ POST -> Root / "interpret" =>
           for {
             callInfo <- req.as[CallInfo]
-            resp     <- respond(Interpreter.performServerRequest(store, callInfo))
+            resp     <- respond(Interpreter.performServerRequest(callInfo)(store))
           } yield resp
 
         case req @ POST -> Root / "continue" =>
           for {
             value <- req.as[Value]
             resp <- respond(
-              Interpreter.handleClientResponse[IO](store, value, queue))
+              Interpreter.handleClientResponse[IO](value, queue))
           } yield resp
 
         case req @ GET -> Root / "assets" / "client.js" =>

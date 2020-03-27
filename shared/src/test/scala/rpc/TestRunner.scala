@@ -9,8 +9,9 @@ import scala.collection.mutable
 
 object TestRunner {
   def fullRun(term: Open.Expr): IO[Value] = {
-    val (interTerm, store) = Closed.compileForInterpreter(term, LamStore.empty)
-    val (cf, vf)           = fullRunIOFunctions(store)
+    implicit val (interTerm, store) =
+      Closed.compileForInterpreter(term, LamStore.empty)
+    val (cf, vf) = fullRunIOFunctions(store)
     Interpreter.runClient[IO](interTerm, Env.empty)(cf)(vf)
   }
 
@@ -28,9 +29,9 @@ object TestRunner {
     }
 
     val callInfoF = (callInfo: CallInfo) =>
-      IO(qExternal(Interpreter.performServerRequest(store, callInfo)))
+      IO(qExternal(Interpreter.performServerRequest(callInfo)(store)))
     val valueF = (value: Value) =>
-      IO(qExternal(Interpreter.handleClientResponse[IO](store, value, q)))
+      IO(qExternal(Interpreter.handleClientResponse[IO](value, q)))
     (callInfoF, valueF)
   }
 

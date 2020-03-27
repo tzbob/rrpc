@@ -129,12 +129,7 @@ object Expr {
 
     def freeVariablesAndLocs(
         interTerm: Open.Expr
-    ): (List[Open.Var],
-        List[Location.Var]
-
-//      ) = {
-        ,
-        List[Open.Var]) = {
+    ): (List[Location.Var], List[Open.Var]) = {
 
       def unpackTupleList(a: List[(List[Var], List[Location.Var], List[Var])]) =
         (a.map(_._1).flatten, a.map(_._2).flatten, a.map(_._3).flatten)
@@ -163,56 +158,7 @@ object Expr {
       }
 
       val (bound, locs, vars) = unpackTupleList(result)
-      (bound, locs, vars.filterNot(bound.toSet))
-//      def helper(
-//          expr: Open.Expr,
-//          bounded: Set[Open.Var]): List[Either[Open.Var, Location.Var]] = {
-//        expr match {
-//          case v @ Open.Var(_) => if (bounded contains v) Nil else List(Left(v))
-//          case Open.App(a, b, _) =>
-//            helper(a, bounded) ::: helper(b, bounded)
-//          case Open.TypeAbs(_, expr) => helper(expr, bounded)
-//          case Open.LocAbs(locs, expr) =>
-//            locs
-//              .map(Location.Var)
-//              .map(Right.apply[Open.Var, Location.Var]) ::: helper(expr,
-//                                                                   bounded)
-//          case Open.Let(bindings, expr) =>
-//            val frees = bindings.flatMap {
-//              case Declaration.Binding(_, _, exprB) =>
-//                helper(exprB, bounded)
-//            }
-//            val newBounded = bindings.foldLeft(bounded) { (acc, b) =>
-//              acc + Var(b.name)
-//            }
-//            frees ::: helper(expr, newBounded)
-//          case Open.Case(expr, alts) =>
-//            helper(expr, bounded) ::: alts.flatMap {
-//              case Alternative(_, params, expr) =>
-//                helper(expr, bounded ++ params.map(Open.Var.apply))
-//            }
-//          case Open.TypeApp(expr, _) => helper(expr, bounded)
-//          case Open.LocApp(expr, _)  => helper(expr, bounded)
-//          case Open.Tup(exprs) =>
-//            exprs.flatMap { e =>
-//              helper(e, bounded)
-//            }
-//          case Open.Prim(_, args) =>
-//            args.flatMap { a =>
-//              helper(a, bounded)
-//            }
-//          case Open.Lit(_) => Nil
-//          case Open.Constructor(_, _, exprs) =>
-//            exprs.flatMap { expr =>
-//              helper(expr, bounded)
-//            }
-//          case Abs(List((name, _, _)), expr) =>
-//            helper(expr, bounded + Open.Var(name))
-//        }
-//      }
-//      val mixedList       = helper(interTerm, Set.empty)
-//      val (lefts, rights) = mixedList.partition(_.isLeft)
-//      lefts.map(_.swap.toOption.get) -> rights.map(_.toOption.get)
+      (locs, vars.filterNot(bound.toSet))
     }
   }
 
@@ -236,7 +182,9 @@ object Expr {
     @JsonCodec case class LamRef(id: Int)            extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
-                         boundedVars: List[Closed.Var],
+                         boundVars: List[Closed.Var],
+                         boundTpeVars: List[Tpe.Var],
+                         boundLocVars: List[Location.Var],
                          freeVars: List[Closed.Var],
                          tpeVars: List[Tpe.Var],
                          locVars: List[Location.Var])
@@ -278,17 +226,17 @@ object Expr {
 
           val ref                        = LamRef(id)
           val (newId, newBody, lamStore) = helper(id + 1, expr)
-          val (bound, locs, vars)        = Open.freeVariablesAndLocs(typedTerm)
+          val (locs, vars)               = Open.freeVariablesAndLocs(typedTerm)
 
           val closedLam = ClosedLam(
             id,
             newBody,
             boundedVars.map(Expr.Closed.Var),
-//            bound.map(x => Closed.Var(x.name)),
-            vars.map(x => Closed.Var(x.name)),
             tpeVars.map(Tpe.Var),
-            locVars.map(Location.Var)
-//            locs
+            locVars.map(Location.Var),
+            vars.map(x => Closed.Var(x.name)),
+            Nil,
+            locs
           )
           (newId, ref, (lamStore + (ref -> closedLam)))
         }
