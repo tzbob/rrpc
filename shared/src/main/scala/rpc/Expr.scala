@@ -31,7 +31,9 @@ object Expr {
     case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
         extends Expr
     case class Abs(abss: List[(String, Tpe, Location)], expr: Expr) extends Expr
-    case class Native(name: String, vars: List[Var])                extends Expr
+
+    // Added for native libs
+    case class Native(name: String, vars: List[Var]) extends Expr
 
     private implicit val prioritizedLocationDecoder: Decoder[Location] =
       Location.locD
@@ -61,7 +63,7 @@ object Expr {
     private implicit val exprLocAppD: Decoder[LocApp] = (c: HCursor) =>
       c.downField("LocApp").as[(Expr, List[Location])].map(LocApp.tupled)
     private implicit val exprTupD: Decoder[Tup] = (c: HCursor) =>
-      c.downField("Tup").as[List[Expr]].map(Tup)
+      c.downField("Tuple").as[List[Expr]].map(Tup)
     private implicit val exprPrimD: Decoder[Prim] = (c: HCursor) =>
       c.downField("Prim").as[(Operator, List[Expr])].map(Prim.tupled)
     private implicit val exprLitD: Decoder[Lit] = (c: HCursor) =>
@@ -114,7 +116,8 @@ object Expr {
           traversedB ::: traversed(expr)
         case Open.Case(expr, alts) =>
           traversed(expr) ::: alts.flatMap {
-            case Alternative(_, _, expr) => traversed(expr)
+            case Alternative.Alt(_, _, expr) => traversed(expr)
+            case Alternative.TupAlt(_, expr) => traversed(expr)
           }
         case Open.TypeApp(expr, _)         => traversed(expr)
         case Open.LocApp(expr, _)          => traversed(expr)
@@ -145,10 +148,13 @@ object Expr {
           unpackTupleList(b)
         case Open.LocAbs(locs, _) => (Nil, locs.map(Location.Var), Nil)
         case Open.Case(_, alts) =>
-          val a = alts.map {
-            case Alternative(_, params, _) =>
-              val boundVars = params.map(Open.Var)
-              (boundVars, Nil, boundVars)
+          val a = alts.map { alternative =>
+            val params = alternative match {
+              case Alternative.Alt(_, params, _) => params
+              case Alternative.TupAlt(params, _) => params
+            }
+            val boundVars = params.map(Open.Var)
+            (boundVars, Nil, boundVars)
           }
           unpackTupleList(a)
         case Open.Abs(abss, _) =>
@@ -255,12 +261,23 @@ object Expr {
             val let           = Closed.Let(newBindings, eC)
 
             (eId, let, nLs ++ eS)
-          case Open.Case(expr, alts) =>
-            val (ls, altId, altExprs) = buildExprList(alts.map(_.expr))
-            val (eId, eC, eS)         = helper(altId, expr)
-            val newAlts =
-              altExprs.zip(alts).map { case (e, a) => a.copy(expr = e) }
-            (eId, Closed.Case(eC, newAlts), ls ++ eS)
+          case Open.Case(expr, alternatives) =>
+            val (ls, altId, altExprs) = alternatives.foldLeft(
+              (Map.empty[LamRef, ClosedLam],
+               id,
+               List.empty[Alternative[Expr.Closed.Expr]])) {
+              case ((eLs, nId, acc), alt) =>
+                alt match {
+                  case a @ Alternative.Alt(_, _, expr) =>
+                    val (id, eC, ls) = helper(nId, expr)
+                    (eLs ++ ls, id, acc :+ a.copy(expr = eC))
+                  case t @ Alternative.TupAlt(_, expr) =>
+                    val (id, eC, ls) = helper(nId, expr)
+                    (eLs ++ ls, id, acc :+ t.copy(expr = eC))
+                }
+            }
+            val (eId, eC, eS) = helper(altId, expr)
+            (eId, Closed.Case(eC, altExprs), ls ++ eS)
           case Open.TypeApp(expr, tpes) =>
             val (i, eC, ls) = helper(id, expr)
             (i, Closed.TypeApp(eC, tpes), ls)

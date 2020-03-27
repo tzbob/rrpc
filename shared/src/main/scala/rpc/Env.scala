@@ -28,4 +28,7 @@ case class Env(tpes: Map[String, Tpe],
 
 object Env {
   val empty: Env = Env(Map.empty, Map.empty, Map.empty)
+  case class Minimal(tpes: Map[String, Tpe],
+                     locs: Map[String, Location],
+                     values: Map[String, Value])
 }

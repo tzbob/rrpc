@@ -51,6 +51,7 @@ object Interpreter {
       asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
     decl match {
       case TopLevel.Library(name, _) =>
+        val name             = "print"
         val (expr, extStore) = (Lib: LibInt).expr(name)(store)
 
         val enableRecursionEnv = expr match {
@@ -184,11 +185,26 @@ object Interpreter {
         combinedCpsInterpret(exprs) { values =>
           cont(Value.Constructed(name, values))
         }
-      case Closed.Case(expr, alts) =>
+      case Closed.Case(expr, alternatives) =>
         cpsInterpretGeneral(expr, env, localLoc) {
+          case v @ Value.Tupled(args) =>
+            val alt = alternatives.collectFirst {
+              case t: Alternative.TupAlt[Closed.Expr] => t
+            }
+            alt match {
+              case Some(Alternative.TupAlt(params, body)) =>
+                val newEnv = params.zip(args).foldLeft(env) {
+                  case (envAcc, (k, v)) =>
+                    envAcc.add(k, v)
+                }
+                cpsInterpretGeneral(body, newEnv, localLoc)(cont)
+              case None => throw CaseError(v, alt.toList)
+            }
           case v @ Value.Constructed(tag, args) =>
+            val alts: List[Alternative.Alt[Closed.Expr]] = alternatives
+              .collect { case a: Alternative.Alt[Closed.Expr] => a }
             alts.find(_.name == tag) match {
-              case Some(Alternative(_, params, body)) =>
+              case Some(Alternative.Alt(_, params, body)) =>
                 val newEnv = params.zip(args).foldLeft(env) {
                   case (envAcc, (k, v)) =>
                     envAcc.add(k, v)
@@ -235,19 +251,7 @@ object Interpreter {
               } else {
                 Left(
                   ExternalCall(
-                    CallInfo(
-                      lr,
-                      value,
-                      closedEnv.add(bound.name, value)
-//                      free.map { v =>
-//                        // FIXME: go through all .get's and fix it with understandable errors
-//                        closedEnv.value(v.name) match {
-//                          case Some(v) => v
-//                          case None =>
-//                            throw MissingValueError(v.name, closedEnv.values)
-//                        }
-//                      }
-                    ),
+                    CallInfo(lr, value, closedEnv.add(bound.name, value)),
                     cont
                   ))
               }
