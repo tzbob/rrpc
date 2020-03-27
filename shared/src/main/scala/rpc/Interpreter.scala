@@ -147,6 +147,8 @@ object Interpreter {
       helper(Nil, results)(cont)
     }
 
+    pprint.log(term)
+
     term match {
       case Closed.Native(name, vars) =>
         combinedCpsInterpret(vars) { vals =>
@@ -186,32 +188,45 @@ object Interpreter {
           cont(Value.Constructed(name, values))
         }
       case Closed.Case(expr, alternatives) =>
-        cpsInterpretGeneral(expr, env, localLoc) {
-          case v @ Value.Tupled(args) =>
-            val alt = alternatives.collectFirst {
-              case t: Alternative.TupAlt[Closed.Expr] => t
+        cpsInterpretGeneral(expr, env, localLoc) { v =>
+          def performAlt(args: List[Value],
+                         params: List[String],
+                         body: Closed.Expr) = {
+            val newEnv = params.zip(args).foldLeft(env) {
+              case (envAcc, (k, v)) =>
+                envAcc.add(k, v)
             }
-            alt match {
-              case Some(Alternative.TupAlt(params, body)) =>
-                val newEnv = params.zip(args).foldLeft(env) {
-                  case (envAcc, (k, v)) =>
-                    envAcc.add(k, v)
-                }
-                cpsInterpretGeneral(body, newEnv, localLoc)(cont)
-              case None => throw CaseError(v, alt.toList)
-            }
-          case v @ Value.Constructed(tag, args) =>
-            val alts: List[Alternative.Alt[Closed.Expr]] = alternatives
-              .collect { case a: Alternative.Alt[Closed.Expr] => a }
-            alts.find(_.name == tag) match {
-              case Some(Alternative.Alt(_, params, body)) =>
-                val newEnv = params.zip(args).foldLeft(env) {
-                  case (envAcc, (k, v)) =>
-                    envAcc.add(k, v)
-                }
-                cpsInterpretGeneral(body, newEnv, localLoc)(cont)
-              case None => throw CaseError(v, alts)
-            }
+            cpsInterpretGeneral(body, newEnv, localLoc)(cont)
+          }
+
+          v match {
+            case Value.Constant(Literal.Bool(b)) =>
+              val alts = alternatives.collect {
+                case a: Alternative.Alt[Closed.Expr] => a
+              }
+              alts.find(_.name.toLowerCase == b.toString) match {
+                case Some(Alternative.Alt(_, _, body)) =>
+                  cpsInterpretGeneral(body, env, localLoc)(cont)
+                case None => throw CaseError(v, alts)
+              }
+            case Value.Tupled(args) =>
+              val alt = alternatives.collectFirst {
+                case t: Alternative.TupAlt[Closed.Expr] => t
+              }
+              alt match {
+                case Some(Alternative.TupAlt(params, body)) =>
+                  performAlt(args, params, body)
+                case None => throw CaseError(v, alt.toList)
+              }
+            case Value.Constructed(tag, args) =>
+              val alts: List[Alternative.Alt[Closed.Expr]] = alternatives
+                .collect { case a: Alternative.Alt[Closed.Expr] => a }
+              alts.find(_.name == tag) match {
+                case Some(Alternative.Alt(_, params, body)) =>
+                  performAlt(args, params, body)
+                case None => throw CaseError(v, alts)
+              }
+          }
         }
 
       case Closed.Let(bindings, expr) =>

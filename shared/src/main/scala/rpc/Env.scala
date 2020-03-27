@@ -24,6 +24,10 @@ case class Env(tpes: Map[String, Tpe],
   def location(k: String): Option[Location] = locs.get(k)
   def tpe(k: String): Option[Tpe]           = tpes.get(k)
   def value(k: String): Option[Value]       = values.get(k)
+
+  override def toString: String = {
+    s"Env($tpes, $locs, ${values.keys}(values omitted))"
+  }
 }
 
 object Env {
