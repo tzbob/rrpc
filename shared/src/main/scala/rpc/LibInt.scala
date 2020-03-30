@@ -6,6 +6,7 @@ import rpc.error.MissingLibError
 
 trait LibInt {
   val sharedFunctions: Map[String, (List[Tpe], List[Value] => Value)] = Map(
+    // FIXME: Add all other todo items
     ("print", List(Tpe.Var("any")) -> { (ls: List[Value]) =>
       println(ls.head)
       Value.Constant(Literal.Unit)

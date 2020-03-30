@@ -7,87 +7,90 @@
 6: IdentifierCommas -> identifier , IdentifierCommas
 7: OptIdentifierCommas -> 
 8: OptIdentifierCommas -> IdentifierCommas
-9: Type -> PolyAbsType
-10: Type -> PolyAbsType LocFun Type
-11: PolyAbsType -> { Identifiers } . PolyAbsType
-12: PolyAbsType -> [ Identifiers ] . PolyAbsType
-13: PolyAbsType -> PrimaryType
-14: PrimaryType -> TupleType
-15: PrimaryType -> ( Type )
-16: PrimaryType -> IdentifierOrTypeApplication
-17: PrimaryType -> RefType
-18: IdentifierOrTypeApplication -> identifier
-19: IdentifierOrTypeApplication -> identifier < Types >
-20: TupleType -> ( Type , TypeSeq )
-21: TypeSeq -> Type
-22: TypeSeq -> Type , TypeSeq
-23: Types -> Type
-24: Types -> Type Types
-25: OptTypes -> 
-26: OptTypes -> Types
-27: RefType -> identifier < Type @ Location >
-28: TopLevel -> Binding
-29: TopLevel -> Binding ; TopLevel
-30: TopLevel -> DataTypeDecl
-31: TopLevel -> DataTypeDecl ; TopLevel
-32: DataTypeDecl -> data Identifiers = { TypeConDecls }
-33: TypeConDecl -> identifier OptTypes
-34: TypeConDecls -> TypeConDecl
-35: TypeConDecls -> TypeConDecl | TypeConDecls
-36: Binding -> identifier : Type = LExpr
-37: Bindings -> Binding
-38: Bindings -> Binding ; Bindings
-39: LExpr -> { Identifiers } . LExpr
-40: LExpr -> [ Identifiers ] . LExpr
-41: LExpr -> \ IdTypeLocSeq . LExpr
-42: LExpr -> let { Bindings } LExpr end
-43: LExpr -> if Expr then LExpr else LExpr
-44: LExpr -> case Expr { Alternatives }
-45: LExpr -> Expr
-46: IdTypeLocSeq -> IdTypeLoc
-47: IdTypeLocSeq -> IdTypeLoc IdTypeLocSeq
-48: IdTypeLoc -> identifier : Type @ Location
-49: Location -> identifier
-50: Alternatives -> Alternative
-51: Alternatives -> Alternative ; Alternatives
-52: Alternative -> identifier OptIdentifiers => LExpr
-53: Alternative -> ( OptIdentifierCommas ) => LExpr
-54: Expr -> Expr Term
-55: Expr -> Expr [ Types ]
-56: Expr -> Expr { Identifiers }
-57: Expr -> Tuple
-58: Expr -> AssignExpr
-59: Tuple -> ( LExpr , LExprSeq )
-60: LExprSeq -> LExpr
-61: LExprSeq -> LExpr , LExprSeq
-62: AssignExpr -> DerefExpr
-63: AssignExpr -> DerefExpr := { Identifiers } [ Types ] AssignExpr
-64: DerefExpr -> LogicNot
-65: DerefExpr -> ! { Identifiers } [ Types ] DerefExpr
-66: DerefExpr -> LogicOr
-67: LogicOr -> LogicOr or LogicAnd
-68: LogicOr -> LogicAnd
-69: LogicAnd -> LogicAnd and CompEqNeq
-70: LogicAnd -> CompEqNeq
-71: CompEqNeq -> CompEqNeq == Comp
-72: CompEqNeq -> CompEqNeq != Comp
-73: CompEqNeq -> Comp
-74: Comp -> Comp < ArithAddSub
-75: Comp -> Comp <= ArithAddSub
-76: Comp -> Comp > ArithAddSub
-77: Comp -> Comp >= ArithAddSub
-78: Comp -> ArithAddSub
-79: ArithAddSub -> ArithAddSub + ArithMulDiv
-80: ArithAddSub -> ArithAddSub - ArithMulDiv
-81: ArithAddSub -> ArithMulDiv
-82: ArithMulDiv -> ArithMulDiv * ArithUnary
-83: ArithMulDiv -> ArithMulDiv / ArithUnary
-84: ArithMulDiv -> ArithUnary
-85: ArithUnary -> - Term
-86: ArithUnary -> Term
-87: Term -> identifier
-88: Term -> integer
-89: Term -> string
-90: Term -> boolean
-91: Term -> ( )
-92: Term -> ( LExpr )
+9: Location -> identifier
+10: Locations -> Identifiers
+11: Type -> LocFunType
+12: Type -> { Identifiers } . Type
+13: Type -> [ Identifiers ] . Type
+14: LocFunType -> AppType
+15: LocFunType -> AppType LocFun LocFunType
+16: AppType -> AtomicType
+17: AppType -> AppType { Locations }
+18: AppType -> AppType [ LocFunTypes ]
+19: AtomicType -> TupleType
+20: AtomicType -> ( Type )
+21: AtomicType -> identifier
+22: TupleType -> ( Type , TypeSeq )
+23: TypeSeq -> Type
+24: TypeSeq -> Type , TypeSeq
+25: LocFunTypes -> LocFunType
+26: LocFunTypes -> LocFunType LocFunTypes
+27: OptLocFunTypes -> 
+28: OptLocFunTypes -> LocFunTypes
+29: TopLevel -> Binding
+30: TopLevel -> Binding ; TopLevel
+31: TopLevel -> DataTypeDecl
+32: TopLevel -> DataTypeDecl ; TopLevel
+33: DataTypeDecl -> data identifier = DataTypeDeclRHS
+34: DataTypeDeclRHS -> TypeConDecls
+35: DataTypeDeclRHS -> { Identifiers } . DataTypeDeclRHS
+36: DataTypeDeclRHS -> [ Identifiers ] . DataTypeDeclRHS
+37: TypeConDecl -> identifier OptLocFunTypes
+38: TypeConDecls -> TypeConDecl
+39: TypeConDecls -> TypeConDecl | TypeConDecls
+40: Binding -> identifier : Type = LExpr
+41: Bindings -> Binding
+42: Bindings -> Binding ; Bindings
+43: LExpr -> { Identifiers } . LExpr
+44: LExpr -> [ Identifiers ] . LExpr
+45: LExpr -> \ IdTypeLocSeq . LExpr
+46: LExpr -> let { Bindings } LExpr end
+47: LExpr -> if Expr then LExpr else LExpr
+48: LExpr -> case Expr { Alternatives }
+49: LExpr -> Expr
+50: IdTypeLocSeq -> IdTypeLoc
+51: IdTypeLocSeq -> IdTypeLoc IdTypeLocSeq
+52: IdTypeLoc -> identifier : Type @ Location
+53: Alternatives -> Alternative
+54: Alternatives -> Alternative ; Alternatives
+55: Alternative -> identifier OptIdentifiers => LExpr
+56: Alternative -> ( OptIdentifierCommas ) => LExpr
+57: Expr -> Expr Term
+58: Expr -> Expr [ LocFunTypes ]
+59: Expr -> Expr { Identifiers }
+60: Expr -> Tuple
+61: Expr -> AssignExpr
+62: Tuple -> ( LExpr , LExprSeq )
+63: LExprSeq -> LExpr
+64: LExprSeq -> LExpr , LExprSeq
+65: AssignExpr -> DerefExpr
+66: AssignExpr -> DerefExpr := { Identifiers } [ LocFunTypes ] AssignExpr
+67: DerefExpr -> LogicNot
+68: DerefExpr -> ! { Identifiers } [ LocFunTypes ] DerefExpr
+69: DerefExpr -> LogicOr
+70: LogicOr -> LogicOr or LogicAnd
+71: LogicOr -> LogicAnd
+72: LogicAnd -> LogicAnd and CompEqNeq
+73: LogicAnd -> CompEqNeq
+74: CompEqNeq -> CompEqNeq == Comp
+75: CompEqNeq -> CompEqNeq != Comp
+76: CompEqNeq -> Comp
+77: Comp -> Comp < ArithAddSub
+78: Comp -> Comp <= ArithAddSub
+79: Comp -> Comp > ArithAddSub
+80: Comp -> Comp >= ArithAddSub
+81: Comp -> ArithAddSub
+82: ArithAddSub -> ArithAddSub + ArithMulDiv
+83: ArithAddSub -> ArithAddSub - ArithMulDiv
+84: ArithAddSub -> ArithMulDiv
+85: ArithMulDiv -> ArithMulDiv * ArithUnary
+86: ArithMulDiv -> ArithMulDiv / ArithUnary
+87: ArithMulDiv -> ArithUnary
+88: ArithUnary -> - Term
+89: ArithUnary -> Term
+90: Term -> identifier
+91: Term -> integer
+92: Term -> string
+93: Term -> boolean
+94: Term -> ( )
+95: Term -> ( LExpr )

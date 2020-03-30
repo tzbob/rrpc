@@ -15,10 +15,12 @@ object Declaration {
     }
 
   case class DataType(name: String,
+                      locAbs: List[String],
                       typeAbs: List[String],
                       constructors: List[Constructor])
   implicit val dataType: Decoder[DataType] = c =>
-    c.as[(String, List[String], List[Constructor])].map(DataType.tupled)
+    c.as[(String, List[String], List[String], List[Constructor])]
+      .map(DataType.tupled)
 
   trait TopLevel
   object TopLevel {
@@ -43,7 +45,7 @@ object Declaration {
       c.downField("LibDeclTopLevel").as[(String, Tpe)].map(Library.tupled)
 
     implicit val tlD: Decoder[TopLevel] =
-      List[Decoder[TopLevel]](tlLibD.widen, tlDataTypeD.widen, tlBindingD.widen)
+      List[Decoder[TopLevel]](tlLibD.widen, tlBindingD.widen, tlDataTypeD.widen)
         .reduceLeft(_ or _)
   }
 

@@ -10,7 +10,7 @@ import rpc.Value.Closure
 class InterpreterTest extends org.scalatest.FunSuite {
   import Dsl._
 
-  val tInt = Tpe.Data("Int", Nil)
+  val tInt = Tpe.Data("Int", Nil, Nil)
 
   test("Interpreter should add a function to the function store") {
     val id           = λˢ('t', tInt)('t')

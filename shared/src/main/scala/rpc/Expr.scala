@@ -25,7 +25,10 @@ object Expr {
     case class Tup(list: List[Expr])                    extends Expr
     case class Prim(op: Operator, args: List[Expr])     extends Expr
     case class Lit(literal: Literal)                    extends Expr
-    case class Constructor(name: String, tpes: List[Tpe], expr: List[Expr])
+    case class Constructor(name: String,
+                           locs: List[Location],
+                           tpes: List[Tpe],
+                           expr: List[Expr])
         extends Expr
     case class Case(expr: Expr, alts: List[Alternative[Open.Expr]]) extends Expr
     case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
@@ -70,7 +73,7 @@ object Expr {
       c.downField("Lit").as[Literal].map(Lit)
     private implicit val exprDataD: Decoder[Constructor] = (c: HCursor) =>
       c.downField("Constr")
-        .as[(String, List[Tpe], List[Expr])]
+        .as[(String, List[Location], List[Tpe], List[Expr])]
         .map(Constructor.tupled)
     private implicit val exprAppD: Decoder[App] = (c: HCursor) => {
       implicit val optionSome: Decoder[Option[Location]] = {
@@ -119,14 +122,14 @@ object Expr {
             case Alternative.Alt(_, _, expr) => traversed(expr)
             case Alternative.TupAlt(_, expr) => traversed(expr)
           }
-        case Open.TypeApp(expr, _)         => traversed(expr)
-        case Open.LocApp(expr, _)          => traversed(expr)
-        case Open.Tup(exprs)               => exprs.flatMap(traversed)
-        case Open.Prim(_, args)            => args.flatMap(traversed)
-        case Open.Lit(_)                   => Nil
-        case Open.Constructor(_, _, exprs) => exprs.flatMap(traversed)
-        case Open.Native(_, vars)          => vars.flatMap(traversed)
-        case Abs(List((_, _, _)), expr)    => traversed(expr)
+        case Open.TypeApp(expr, _)            => traversed(expr)
+        case Open.LocApp(expr, _)             => traversed(expr)
+        case Open.Tup(exprs)                  => exprs.flatMap(traversed)
+        case Open.Prim(_, args)               => args.flatMap(traversed)
+        case Open.Lit(_)                      => Nil
+        case Open.Constructor(_, _, _, exprs) => exprs.flatMap(traversed)
+        case Open.Native(_, vars)             => vars.flatMap(traversed)
+        case Abs(List((_, _, _)), expr)       => traversed(expr)
       })
     }
 
@@ -178,7 +181,10 @@ object Expr {
     case class Tup(list: List[Expr])                    extends Expr
     case class Prim(op: Operator, args: List[Expr])     extends Expr
     case class Lit(literal: Literal)                    extends Expr
-    case class Constructor(name: String, tpes: List[Tpe], expr: List[Expr])
+    case class Constructor(name: String,
+                           locs: List[Location],
+                           tpes: List[Tpe],
+                           expr: List[Expr])
         extends Expr
     case class Case(expr: Expr, alts: List[Alternative[Closed.Expr]])
         extends Expr
@@ -291,9 +297,9 @@ object Expr {
             val (ls, id, nargs) = buildExprList(args)
             (id, Closed.Prim(op, nargs), ls)
           case Open.Lit(literal) => (id, Closed.Lit(literal), Map.empty)
-          case Open.Constructor(name, tpes, exprs) =>
+          case Open.Constructor(name, locs, tpes, exprs) =>
             val (ls, id, nExprs) = buildExprList(exprs)
-            (id, Closed.Constructor(name, tpes, nExprs), ls)
+            (id, Closed.Constructor(name, locs, tpes, nExprs), ls)
           case Open.Var(name) => (id, Closed.Var(name), Map.empty)
           case Open.Native(name, vars) =>
             (id,

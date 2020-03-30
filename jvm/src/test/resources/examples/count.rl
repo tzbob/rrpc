@@ -1,8 +1,8 @@
-data List a = { Nil | Cons a (List <a>) } ;
+data List = [a]. Nil | Cons a (List [a]) ;
 
-count : {l1}. [a]. (List<a> -l1-> Int)
+count : {l1}. [a]. (List [a] -l1-> Int)
     = {l1}. [a].
-      \xs: List<a> @ l1.
+      \xs: List [a] @ l1.
         case xs {
           Nil => 0;
           Cons y ys => 1 + (count {l1} [a] ys)

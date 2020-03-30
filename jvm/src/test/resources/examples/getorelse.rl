@@ -1,8 +1,8 @@
-data Option a = { None | Some a } ;
+data Option = [a].  None | Some a ;
 
-getOrElse : {l1}. [a]. (Option<a> -l1-> a -l1-> a)
+getOrElse : {l1}. [a]. (Option [a] -l1-> a -l1-> a)
      = {l1}. [a].
-     \opt:Option<a> @ l1 els:a @ l1.
+     \opt:Option [a] @ l1 els:a @ l1.
         case opt {
         None => els;
         Some a => a

@@ -147,7 +147,7 @@ object Interpreter {
       helper(Nil, results)(cont)
     }
 
-    pprint.log(term)
+//    pprint.log(term)
 
     term match {
       case Closed.Native(name, vars) =>
@@ -183,7 +183,7 @@ object Interpreter {
           cont(Value.Constant(Operator.operators(op)(constants)))
         }
 
-      case Closed.Constructor(name, _, exprs) =>
+      case Closed.Constructor(name, locs, _, exprs) =>
         combinedCpsInterpret(exprs) { values =>
           cont(Value.Constructed(name, values))
         }

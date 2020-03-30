@@ -1,3 +1,4 @@
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // Arrow for function types                                                   //
@@ -52,4 +53,9 @@ addA
       (arr_par_fun {client server client client client} [Int Int Int] f g)
       (arr_plus {client})
 
+;
+
+// addA accepts 2 arrows and returns an arrow
+main : Int
+     = addA (\i : Int @ client. 5) (\i : Int @ server. 3) 0
 

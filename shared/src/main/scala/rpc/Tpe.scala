@@ -11,8 +11,8 @@ object Tpe {
   case class Fun(a: Tpe, loc: Location, b: Tpe)                extends Tpe
   case class TypeAbs(abstractions: List[String], tpeBody: Tpe) extends Tpe
   case class LocAbs(abstractions: List[String], tpeBody: Tpe)  extends Tpe
-  case class Data(name: String, fields: List[Tpe])             extends Tpe
-  case class Ref(loc: Location, tpe: Tpe)                      extends Tpe
+  case class Data(name: String, locs: List[Location], fields: List[Tpe])
+      extends Tpe
 
   private implicit val prioritizedLocationDecoder: Decoder[Location] =
     Location.locD
@@ -28,9 +28,9 @@ object Tpe {
   private implicit val tpeLocAbsD: Decoder[LocAbs] = (c: HCursor) =>
     c.downField("LocAbsType").as[(List[String], Tpe)].map(LocAbs.tupled)
   private implicit val tpeDataD: Decoder[Data] = (c: HCursor) =>
-    c.downField("ConType").as[(String, List[Tpe])].map(Data.tupled)
-  private implicit val refD: Decoder[Ref] = (c: HCursor) =>
-    c.downField("RefType").as[(Location, Tpe)].map(Ref.tupled)
+    c.downField("ConType")
+      .as[(String, List[Location], List[Tpe])]
+      .map(Data.tupled)
 
   implicit val tpeD: Decoder[Tpe] =
     List[Decoder[Tpe]](tpeVarD.widen,
@@ -38,6 +38,5 @@ object Tpe {
                        tpeFunD.widen,
                        tpeAbsD.widen,
                        tpeDataD.widen,
-                       tpeLocAbsD.widen,
-                       refD.widen).reduceLeft(_ or _)
+                       tpeLocAbsD.widen).reduceLeft(_ or _)
 }

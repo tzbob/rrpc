@@ -29,7 +29,7 @@ object PolyRpcCaller {
   }
 
   private def generateTypedAST(name: String)(implicit c: Config) = {
-    val bin      = "jvm/src/main/resources/polyrpc-exe"
+    val bin      = s"jvm/src/main/resources/${OsUtil.simpleOs()}/polyrpc-exe"
     val location = toFileLocation(name)
     Process(s"$bin --output-json $location").lazyLines.mkString("\n")
   }

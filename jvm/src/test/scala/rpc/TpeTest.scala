@@ -23,7 +23,7 @@ class TpeTest extends AnyFunSuite {
     val target = Right(
       Declaration.TopLevel.Binding(Declaration.Binding(
         "main",
-        Tpe.Data("Unit", List()),
+        Tpe.Data("Unit", Nil, List()),
         Expr.Open.App(
           Expr.Open.LocApp(Expr.Open.Var("print"),
                            List(Location.Loc("client"))),
@@ -56,22 +56,23 @@ class TpeTest extends AnyFunSuite {
     val target = List(
       TopLevel.Library("print",
                        Tpe.LocAbs(List("l"),
-                                  Tpe.Fun(Tpe.Data("String", List()),
+                                  Tpe.Fun(Tpe.Data("String", Nil, List()),
                                           Location.Var("l"),
-                                          Tpe.Data("Unit", List())))),
-      TopLevel.DataType(Declaration.DataType("Unit", List(), List())),
-      TopLevel.DataType(Declaration.DataType("Int", List(), List())),
+                                          Tpe.Data("Unit", Nil, List())))),
+      TopLevel.DataType(Declaration.DataType("Unit", Nil, List(), List())),
+      TopLevel.DataType(Declaration.DataType("Int", Nil, List(), List())),
       TopLevel.DataType(
         Declaration.DataType("Bool",
+                             Nil,
                              List(),
                              List(Declaration.Constructor("True", List()),
                                   Declaration.Constructor("False", List())))
       ),
-      TopLevel.DataType(Declaration.DataType("String", List(), List())),
+      TopLevel.DataType(Declaration.DataType("String", Nil, List(), List())),
       TopLevel.Binding(
         Declaration.Binding(
           "main",
-          Tpe.Data("Unit", List()),
+          Tpe.Data("Unit", Nil, List()),
           Expr.Open.App(
             Expr.Open.LocApp(Expr.Open.Var("print"),
                              List(Location.Loc("client"))),
