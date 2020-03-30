@@ -47,7 +47,7 @@ take_stream
         case s {
 	  Nil => Nil {client} [a];
 	  Cons y ys =>
-	    if n >= 0
+	    if n <= 0
 	    then Nil {client} [a]
 	    else Cons {client} [a] y (\unit : Unit @ client . take_stream {l1 l2} [a] (ys ()) (n-1))
 	}

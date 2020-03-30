@@ -118,7 +118,8 @@ class FullExprTest extends AnyFunSuite {
 
   test("Test Stream") {
     import Value._
-    val result = runProgram("stream",true)
-    assert(result.values("main") === null)
+    import Dsl._
+    val result = runProgram("stream")
+    assert(result.values("test1") === Constant(3))
   }
 }

@@ -12,4 +12,10 @@ object OsUtil {
     else if (linux) "linux"
     else if (mac) "mac"
     else throw new RuntimeException(s"Unknown OS: $os")
+
+  def binSuffix(): String = simpleOs() match {
+    case "windows" => ".exe"
+    case "linux"   => ""
+    case "windows" => ""
+  }
 }
