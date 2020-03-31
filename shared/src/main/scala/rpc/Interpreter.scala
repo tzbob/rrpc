@@ -51,7 +51,6 @@ object Interpreter {
       asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
     decl match {
       case TopLevel.Library(name, _) =>
-        val name             = "print"
         val (expr, extStore) = (Lib: LibInt).expr(name)(store)
 
         val enableRecursionEnv = expr match {

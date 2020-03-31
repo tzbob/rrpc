@@ -14,7 +14,13 @@ object Dsl {
 
   // Syntax for 's.v and automatic forming of terms of symbols where possible
   implicit class SymboDsl(symbol: Char) { val v = symbToVar(symbol) }
-  implicit def symbToVar(symbol: Char): Var = Var(symbol.toString)
+  implicit def symbToVar(symbol: Char): Var        = Var(symbol.toString)
+  implicit def symbToTpeVar(symbol: Char): Tpe.Var = Tpe.Var(symbol.toString)
+  implicit def symbToLocVar(symbol: Char): Location.Var =
+    Location.Var(symbol.toString)
+
+  val BoolTpe = Tpe.Data("Bool", Nil, Nil)
+  val UnitTpe = Tpe.Data("Unit", Nil, Nil)
 
   // Automatic forming of constant terms
   implicit def intLit(int: Int): Literal    = Literal.Int(int)
@@ -37,4 +43,5 @@ object Dsl {
 
   val c = Location.client
   val s = Location.server
+
 }
