@@ -1,5 +1,6 @@
 package rpc
 
+import io.circe.Decoder
 import io.circe.parser._
 import org.scalatest.funsuite.AnyFunSuite
 import rpc.Declaration.TopLevel

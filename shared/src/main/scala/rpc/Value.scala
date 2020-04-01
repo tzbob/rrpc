@@ -1,22 +1,26 @@
 package rpc
 
-import rpc.Expr.Closed.{LamRef}
+import rpc.Expr.Closed.{LamRef, LamStore}
 import io.circe._
 import io.circe.generic.JsonCodec
-import io.circe.generic.auto._
 import io.circe.syntax._
 import rpc.Expr.Closed
 
-@JsonCodec sealed trait Value
+sealed trait Value
 
 object Value {
-  case class Constant(lit: Literal)             extends Value
-  case class Closure(ref: LamRef, var env: Env) extends Value
+  case class Constant(lit: Literal)                     extends Value
+  case class Closure(ref: LamRef, var env: Env.Minimal) extends Value
   object Closure {
-    def addRecursiveClosure(name: String, lamRef: LamRef, env: Env): Env = {
+    def addRecursiveClosure(name: String,
+                            lamRef: LamRef,
+                            env: Env,
+                            store: LamStore): Env = {
       val closure = Closure(lamRef, null)
       val recEnv  = env.add(name, closure)
-      closure.env = recEnv
+      val cl      = store(lamRef)
+      val minimal = Env.minimize(recEnv, cl.tpeVars, cl.locVars, cl.freeVars)
+      closure.env = minimal
       recEnv
     }
   }

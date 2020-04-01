@@ -117,6 +117,11 @@ trait LibInt {
     })
   }
 
+  def openExpr(name: String) = functions.get(name) match {
+    case None       => throw MissingLibError(name)
+    case Some(data) => data.expr
+  }
+
   def expr(name: String): LamStore => (Closed.LamRef, LamStore) =
     functions.get(name) match {
       case None => throw MissingLibError(name)

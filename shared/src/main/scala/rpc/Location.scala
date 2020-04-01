@@ -4,7 +4,6 @@ import cats.syntax.functor._
 import io.circe.generic.JsonCodec
 import io.circe.{Decoder, HCursor}
 
-@JsonCodec
 sealed trait Location
 object Location {
   case class Var(name: String) extends Location

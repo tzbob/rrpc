@@ -14,9 +14,6 @@ object Tpe {
   case class Data(name: String, locs: List[Location], fields: List[Tpe])
       extends Tpe
 
-  private implicit val prioritizedLocationDecoder: Decoder[Location] =
-    Location.locD
-
   private implicit val tpeVarD: Decoder[Var] = (c: HCursor) =>
     c.downField("TypeVarType").as[String].map(Var)
   private implicit val tpeTupleD: Decoder[Tup] = (c: HCursor) =>

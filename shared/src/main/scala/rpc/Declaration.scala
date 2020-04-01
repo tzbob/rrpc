@@ -22,6 +22,8 @@ object Declaration {
     c.as[(String, List[String], List[String], List[Constructor])]
       .map(DataType.tupled)
 
+
+
   trait TopLevel
   object TopLevel {
     case class Binding[E](b: Declaration.Binding[E]) extends TopLevel
@@ -45,7 +47,7 @@ object Declaration {
       c.downField("LibDeclTopLevel").as[(String, Tpe)].map(Library.tupled)
 
     implicit val tlD: Decoder[TopLevel] =
-      List[Decoder[TopLevel]](tlLibD.widen, tlBindingD.widen, tlDataTypeD.widen)
+      List[Decoder[TopLevel]](tlDataTypeD.widen, tlBindingD.widen, tlLibD.widen)
         .reduceLeft(_ or _)
   }
 

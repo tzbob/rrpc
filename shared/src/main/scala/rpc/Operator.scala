@@ -4,7 +4,7 @@ import cats.syntax.functor._
 import io.circe.generic.JsonCodec
 import io.circe.{Decoder, DecodingFailure, HCursor}
 
-@JsonCodec sealed trait Operator
+sealed trait Operator
 object Operator {
   private def opD(op: Operator): Decoder[Operator] =
     (c: HCursor) => {

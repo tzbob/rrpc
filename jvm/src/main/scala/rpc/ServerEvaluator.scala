@@ -19,6 +19,7 @@ object ServerEvaluator {
 
   def buildRoutes(expr: Expr.Closed.Expr, store: LamStore, blocker: Blocker)(
       implicit shift: ContextShift[IO]): HttpRoutes[IO] = {
+    import io.circe.generic.auto._
     implicit val decoder  = jsonOf[IO, CallInfo]
     implicit val vencoder = jsonOf[IO, Value]
 

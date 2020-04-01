@@ -19,8 +19,7 @@ object Interpreter {
                         Closed.Expr) => F[Closed.Expr]
 
   // FIXME: Make Env a minimal subset using freelocs/freevars!
-  @JsonCodec
-  case class CallInfo(lamRef: LamRef, bound: Value, env: Env)
+  case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
   type Cont[A] = A => Either[ExternalCall, Value]
@@ -55,7 +54,7 @@ object Interpreter {
 
         val enableRecursionEnv = expr match {
           case lr @ LamRef(_) =>
-            Closure.addRecursiveClosure(name, lr, env)
+            Closure.addRecursiveClosure(name, lr, env, extStore)
           case _ => env
         }
         Async[F].pure(enableRecursionEnv -> extStore)
@@ -68,8 +67,9 @@ object Interpreter {
         val RequestReplyF(requestF, replyF) = asyncFuns(extStore)
 
         val enableRecursionEnv = expr match {
-          case lr @ LamRef(_) => Closure.addRecursiveClosure(name, lr, env)
-          case _              => env
+          case lr @ LamRef(_) =>
+            Closure.addRecursiveClosure(name, lr, env, extStore)
+          case _ => env
         }
 
         implicit val s = extStore
@@ -96,7 +96,8 @@ object Interpreter {
               interpretRequestOrValue _ compose cont
 
             val continueCall: CallInfo => F[Value] = {
-              case CallInfo(lr, bound, callEnv) => {
+              case CallInfo(lr, bound, minCallEnv) => {
+                val callEnv = minCallEnv.toEnv
                 store.get(lr) match {
                   case Some(
                       Closed
@@ -146,8 +147,6 @@ object Interpreter {
       helper(Nil, results)(cont)
     }
 
-//    pprint.log(term)
-
     term match {
       case Closed.Native(name, vars) =>
         combinedCpsInterpret(vars) { vals =>
@@ -158,7 +157,7 @@ object Interpreter {
           case Closure(lr, closedEnv) =>
             val ClosedLam(_, body, _, List(tvar), _, _, _, _) = store(lr)
 
-            val tEnv = closedEnv.add(tvar.str, tpe)
+            val tEnv = closedEnv.toEnv.add(tvar.str, tpe)
             cpsInterpretGeneral(body, tEnv, localLoc)(cont)
         }
       case Closed.LocApp(expr, List(locV)) =>
@@ -169,7 +168,7 @@ object Interpreter {
               case l @ Location.Loc(_) => l
               case Location.Var(name)  => env.locs(name)
             }
-            val lEnv = closedEnv.add(lvar.name, loc)
+            val lEnv = closedEnv.toEnv.add(lvar.name, loc)
             cpsInterpretGeneral(body, lEnv, localLoc)(cont)
         }
       case Closed.Tup(exprs) =>
@@ -245,13 +244,16 @@ object Interpreter {
             throw MissingValueError(name, env.values)
         }
 
-      // FIXME: Only close over the minimal needed environment
-      case lr @ Closed.LamRef(_) => cont(Closure(lr, env))
+      case lr @ Closed.LamRef(_) =>
+        val ClosedLam(_, _, _, _, _, freeVars, freeTpes, freeLocs) = store(lr)
+
+        val minimal = Env.minimize(env, freeTpes, freeLocs, freeVars)
+        cont(Closure(lr, minimal))
       case Closed.App(fun, param, Some(locV)) =>
         cpsInterpretGeneral(fun, env, localLoc) {
           case Closure(lr, closedEnv) =>
             cpsInterpretGeneral(param, env, localLoc) { value => // evaluate param
-              val Closed.ClosedLam(_, body, List(bound), free, _, _, _, _) =
+              val Closed.ClosedLam(_, body, List(bound), _, _, _, _, _) =
                 store(lr)
 
               val loc = locV match {
@@ -260,7 +262,7 @@ object Interpreter {
               }
               if (loc == localLoc) {
                 cpsInterpretGeneral(body,
-                                    closedEnv.add(bound.name, value),
+                                    closedEnv.toEnv.add(bound.name, value),
                                     localLoc)(cont)
               } else {
                 Left(
@@ -279,7 +281,8 @@ object Interpreter {
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
       case Some(Closed.ClosedLam(_, body, _, _, _, _, _, _)) =>
-        Interpreter.cpsInterpretGeneral(body, env, Location.server)(Right.apply)
+        Interpreter.cpsInterpretGeneral(body, env.toEnv, Location.server)(
+          Right.apply)
       case None =>
         throw new RuntimeException(s"No $lr in store $store")
     }

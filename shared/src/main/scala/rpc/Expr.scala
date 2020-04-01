@@ -38,11 +38,6 @@ object Expr {
     // Added for native libs
     case class Native(name: String, vars: List[Var]) extends Expr
 
-    private implicit val prioritizedLocationDecoder: Decoder[Location] =
-      Location.locD
-    private implicit val prioritizedOpDecoder: Decoder[Operator] =
-      Operator.opDImpl
-
     private implicit val exprVarD: Decoder[Var] = (c: HCursor) =>
       c.downField("Var").as[String].map(Var.apply)
     private implicit val exprTypeAbsD: Decoder[TypeAbs] = (c: HCursor) =>
@@ -163,6 +158,9 @@ object Expr {
         case Open.Abs(abss, _) =>
           val bound = abss.map { case (name, _, _) => Open.Var(name) }
           (bound, Nil, bound)
+        case Open.App(_, _, Some(l @ Location.Var(_))) => (Nil, List(l), Nil)
+        case Open.LocApp(_, locs) =>
+          (Nil, locs.collect { case l @ Location.Var(_) => l }, Nil)
         case _ => (Nil, Nil, Nil)
       }
 
@@ -191,7 +189,7 @@ object Expr {
     case class Let(binding: List[Declaration.Binding[Closed.Expr]], expr: Expr)
         extends Expr
     case class Native(name: String, vars: List[Var]) extends Expr
-    @JsonCodec case class LamRef(id: Int)            extends Expr
+    case class LamRef(id: Int)                       extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
                          boundVars: List[Closed.Var],
@@ -207,8 +205,8 @@ object Expr {
 
     type LamStore = Map[LamRef, Closed.ClosedLam]
 
-    import io.circe.generic.auto._
     import io.circe.syntax._
+    import io.circe.generic.auto._
     import io.circe.parser.decode
     implicit val keyLamRefEncoder = new KeyEncoder[Closed.LamRef] {
       override def apply(key: Closed.LamRef): String = key.asJson.noSpaces

@@ -9,32 +9,6 @@ import rpc.Interpreter.RequestReplyF
 
 class TpeTest extends AnyFunSuite {
 
-  test("hello world binding top level") {
-    val stringSrc =
-      """{"BindingTopLevel":
-                   ["main",
-                    {"ConType": ["Unit", []]},
-                    {"App": [{"LocApp": [{"Var": "print"}, [{"Location": "client"}]]},
-                             {"Lit": {"StrLit": "\"Hello World\\n\""}},
-                             {"Just": {"Location": "client"}}]}]}"""
-
-    val result = decode[Declaration.TopLevel.Binding[Expr.Open.Expr]](stringSrc)
-
-    val target = Right(
-      Declaration.TopLevel.Binding(Declaration.Binding(
-        "main",
-        Tpe.Data("Unit", Nil, List()),
-        Expr.Open.App(
-          Expr.Open.LocApp(Expr.Open.Var("print"),
-                           List(Location.Loc("client"))),
-          Expr.Open.Lit(Literal.String("\"Hello World\\n\"")),
-          Some(Location.Loc("client"))
-        )
-      )))
-
-    assert(result === target)
-  }
-
   test("Full Hello World") {
     val src =
       """ [{"LibDeclTopLevel": ["print",
