@@ -1,6 +1,5 @@
 package rpc
 
-import io.circe.generic.JsonCodec
 import rpc.Expr.Closed
 
 case class Env(tpes: Map[String, Tpe],

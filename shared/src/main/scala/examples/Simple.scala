@@ -2,7 +2,7 @@ package examples
 
 import rpc._
 
-import io.circe._, io.circe.generic.auto._, io.circe.parser._, io.circe.syntax._
+import io.circe.generic.auto._, io.circe.parser._
 
 object Simple extends RpcApp with RpcAppInt {
 
@@ -26,7 +26,7 @@ object Simple extends RpcApp with RpcAppInt {
                                        {"Just": {"Location": "client"}}]}]}]
         """
 
-    val parsedEx = decode[List[Declaration.TopLevel]](exampleHelloWorld)
+    decode[List[Declaration.TopLevel]](exampleHelloWorld)
 
     // go through all top level decls to build environment, then execute main
     ???

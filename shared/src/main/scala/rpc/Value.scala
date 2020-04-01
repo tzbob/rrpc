@@ -2,9 +2,6 @@ package rpc
 
 import rpc.Expr.Closed.{LamRef, LamStore}
 import io.circe._
-import io.circe.generic.JsonCodec
-import io.circe.syntax._
-import rpc.Expr.Closed
 
 sealed trait Value
 

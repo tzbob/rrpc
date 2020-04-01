@@ -1,7 +1,6 @@
 package rpc
 
-import cats.syntax.functor._
-import io.circe.generic.JsonCodec
+import cats.syntax.functor._
 import io.circe.{Decoder, HCursor}
 
 sealed trait Tpe

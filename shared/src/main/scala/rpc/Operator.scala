@@ -1,8 +1,7 @@
 package rpc
 
-import cats.syntax.functor._
-import io.circe.generic.JsonCodec
 import io.circe.{Decoder, DecodingFailure, HCursor}
+import rpc.error.TypeError
 
 sealed trait Operator
 object Operator {
@@ -24,15 +23,18 @@ object Operator {
   private def binaryB(
       f: (Boolean, Boolean) => Boolean): List[Literal] => Literal = binary {
     case (Literal.Bool(b1), Literal.Bool(b2)) => Literal.Bool(f(b1, b2))
+    case e                                    => throw TypeError(e, "(Bool, Bool)")
   }
 
   private def binaryIB(f: (Int, Int) => Boolean): List[Literal] => Literal =
     binary {
       case (Literal.Int(i1), Literal.Int(i2)) => Literal.Bool(f(i1, i2))
+      case e                                  => throw TypeError(e, "(Int, Int)")
     }
 
   private def binaryI(f: (Int, Int) => Int): List[Literal] => Literal = binary {
     case (Literal.Int(i1), Literal.Int(i2)) => Literal.Int(f(i1, i2))
+    case e                                  => throw TypeError(e, "(Int, Int)")
   }
 
   val operators = Map[Operator, List[Literal] => Literal](

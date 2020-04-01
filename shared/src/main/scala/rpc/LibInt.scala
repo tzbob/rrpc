@@ -108,15 +108,6 @@ trait LibInt {
 
   def functions: Map[String, LibData] = sharedFunctions ++ nativeFunctions
 
-  private def mkAbs(tpes: List[Tpe])(
-      bodyF: List[Open.Var] => Open.Expr): Open.Expr = {
-    val vars = (1 to tpes.size).map(i => Open.Var(s"##lib_arg_$i")).toList
-    Open.LocAbs(List("l"), vars.zip(tpes).reverse.foldLeft(bodyF(vars)) {
-      case (body, (v, tpe)) =>
-        Open.Abs(List((v.name, tpe, Location.Var("l"))), body)
-    })
-  }
-
   def openExpr(name: String) = functions.get(name) match {
     case None       => throw MissingLibError(name)
     case Some(data) => data.expr

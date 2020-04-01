@@ -2,12 +2,11 @@ package rpc
 
 import cats.effect.Async
 import cats.implicits._
-import io.circe.generic.JsonCodec
 import rpc.Declaration.TopLevel
 import rpc.Expr.Closed.{ClosedLam, LamRef, LamStore}
 import rpc.Expr.{Closed, Open}
 import rpc.Value._
-import rpc.error.{CaseError, MissingLibError, MissingValueError}
+import rpc.error.{CaseError, MissingValueError, TypeError}
 
 import scala.collection.mutable
 
@@ -18,7 +17,6 @@ object Interpreter {
                         LamRef,
                         Closed.Expr) => F[Closed.Expr]
 
-  // FIXME: Make Env a minimal subset using freelocs/freevars!
   case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
@@ -101,9 +99,10 @@ object Interpreter {
                 store.get(lr) match {
                   case Some(
                       Closed
-                        .ClosedLam(_, body, _, _, _, _, _, _)) =>
+                        .ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
                     val result =
-                      runClient(body, callEnv)(requestF)(replyF)
+                      runClient(body, callEnv.add(boundVar.name, bound))(
+                        requestF)(replyF)
                     val responseF = Async[F].flatMap(result)(replyF)
                     interpretResponseF(responseF)
                   case None =>
@@ -159,6 +158,7 @@ object Interpreter {
 
             val tEnv = closedEnv.toEnv.add(tvar.str, tpe)
             cpsInterpretGeneral(body, tEnv, localLoc)(cont)
+          case e => throw TypeError(e, "Type Abstraction")
         }
       case Closed.LocApp(expr, List(locV)) =>
         cpsInterpretGeneral(expr, env, localLoc) {
@@ -170,6 +170,7 @@ object Interpreter {
             }
             val lEnv = closedEnv.toEnv.add(lvar.name, loc)
             cpsInterpretGeneral(body, lEnv, localLoc)(cont)
+          case e => throw TypeError(e, "Location Abstraction")
         }
       case Closed.Tup(exprs) =>
         combinedCpsInterpret(exprs) { values =>
@@ -177,11 +178,14 @@ object Interpreter {
         }
       case Closed.Prim(op, args) =>
         combinedCpsInterpret(args) { values =>
-          val constants = values.map { case Value.Constant(lit) => lit }
+          val constants = values.map {
+            case Value.Constant(lit) => lit
+            case e                   => throw TypeError(e, "Constant")
+          }
           cont(Value.Constant(Operator.operators(op)(constants)))
         }
 
-      case Closed.Constructor(name, locs, _, exprs) =>
+      case Closed.Constructor(name, _, _, exprs) =>
         combinedCpsInterpret(exprs) { values =>
           cont(Value.Constructed(name, values))
         }
@@ -224,6 +228,7 @@ object Interpreter {
                   performAlt(args, params, body)
                 case None => throw CaseError(v, alts)
               }
+            case e => throw TypeError(e, "Tuple, DataType or Bool")
           }
         }
 
@@ -272,6 +277,7 @@ object Interpreter {
                   ))
               }
             }
+          case e => throw TypeError(e, "Function")
         }
     }
   }
@@ -280,9 +286,10 @@ object Interpreter {
       implicit store: LamStore): Either[ExternalCall, Value] = {
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
-      case Some(Closed.ClosedLam(_, body, _, _, _, _, _, _)) =>
-        Interpreter.cpsInterpretGeneral(body, env.toEnv, Location.server)(
-          Right.apply)
+      case Some(Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
+        Interpreter.cpsInterpretGeneral(body,
+                                        env.toEnv.add(boundVar.name, bound),
+                                        Location.server)(Right.apply)
       case None =>
         throw new RuntimeException(s"No $lr in store $store")
     }

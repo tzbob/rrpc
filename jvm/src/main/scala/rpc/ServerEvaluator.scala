@@ -3,14 +3,12 @@ package rpc
 import java.io.File
 
 import cats.effect.{Blocker, ContextShift, IO}
-import io.circe.{Decoder, Encoder}
 import io.circe.syntax._
 import org.http4s.{HttpRoutes, MediaType, StaticFile}
 import org.http4s.circe._
 import org.http4s.dsl.io._
 import org.http4s.headers.`Content-Type`
 import rpc.Interpreter.{CallInfo, Cont, ExternalCall}
-import org.http4s.server.staticcontent._
 import rpc.Expr.Closed.LamStore
 
 import scala.collection.mutable
