@@ -17,10 +17,3 @@ object Location {
   implicit val locD: Decoder[Location] =
     List[Decoder[Location]](locVarD.widen, locLocD.widen).reduceLeft(_ or _)
 }
-
-//sealed trait Location { def superscript: String }
-//
-//object Location {
-//  case object Server extends Location { val superscript = "ˢ" }
-//  case object Client extends Location { val superscript = "ᶜ" }
-//}
