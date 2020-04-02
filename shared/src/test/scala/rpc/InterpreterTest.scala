@@ -43,9 +43,8 @@ class InterpreterTest extends org.scalatest.FunSuite {
       'x'), c)
     implicit val (term, store) =
       Closed.compileForInterpreter(identityToConst, LamStore.empty)
-    val stackTestResult = Interpreter.runClient(term, Env.empty) { _ =>
-      testEff
-    }(_ => ???)
+    val stackTestResult = Interpreter.runClient(term, Env.empty)(
+      RequestReplyF(_ => testEff, _ => ???))
     assert(stackTestResult.unsafeRunSync() === Value.Constant(5))
   }
 
@@ -56,13 +55,15 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
     implicit val (term, store) =
       Closed.compileForInterpreter(identityToConst, LamStore.empty)
-    val stackTestResult = Interpreter.runClient(term, Env.empty) { x =>
-      assert(
-        x === CallInfo(LamRef(1),
-                       Value.Constant(5),
-                       Env.Minimal.empty.copy(values = Map("x" -> Value.Constant(5)))))
-      testEff
-    }(_ => ???)
+    val stackTestResult = Interpreter.runClient(term, Env.empty)(RequestReplyF({
+      x =>
+        assert(
+          x === CallInfo(
+            LamRef(1),
+            Value.Constant(5),
+            Env.Minimal.empty.copy(values = Map("x" -> Value.Constant(5)))))
+        testEff
+    }, _ => ???))
     assert(stackTestResult.unsafeRunSync() === Value.Constant(999))
   }
 
@@ -74,13 +75,15 @@ class InterpreterTest extends org.scalatest.FunSuite {
       Closed.compileForInterpreter(identityToConst, LamStore.empty)
 
     var usedServer = false
-    val stackTestResult = Interpreter.runClient(term, Env.empty) { x =>
-      IO {
-        usedServer = true
-        Right(x.bound): Either[CallInfo, Value]
-      }
-    }(_ => ???)
-    assert(stackTestResult.unsafeRunSync() === Closure(LamRef(2), Env.Minimal.empty))
+    val stackTestResult = Interpreter.runClient(term, Env.empty)(RequestReplyF({
+      x =>
+        IO {
+          usedServer = true
+          Right(x.bound): Either[CallInfo, Value]
+        }
+    }, (_ => ???)))
+    assert(
+      stackTestResult.unsafeRunSync() === Closure(LamRef(2), Env.Minimal.empty))
     assert(usedServer)
   }
 
@@ -90,7 +93,8 @@ class InterpreterTest extends org.scalatest.FunSuite {
 
     val stackTestResult = TestRunner.fullRun(identityToConst)
 
-    assert(stackTestResult.unsafeRunSync() === Closure(LamRef(2), Env.Minimal.empty))
+    assert(
+      stackTestResult.unsafeRunSync() === Closure(LamRef(2), Env.Minimal.empty))
   }
   test("Interpreter should reply to simple server requests") {
     val callToClient = λs('s', tInt)(λc('s', tInt)('s') apply ('s', s)) apply (Lit(

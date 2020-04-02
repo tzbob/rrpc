@@ -1,40 +1,66 @@
 package rpc
 
 import cats.syntax.functor._
-import io.circe.{
-  Decoder,
-  DecodingFailure,
-  HCursor,
-  KeyDecoder,
-  KeyEncoder
-}
+import io.circe.{Decoder, DecodingFailure, HCursor, KeyDecoder, KeyEncoder}
 object Expr {
 
   object Open {
     sealed trait Expr
 
     case class Var(name: String) extends Expr
-    case class App(fun: Expr, param: Expr, location: Option[Location])
+
+    // FIXME: add maybe tpe to case + apps
+    case class Case(expr: Expr,
+                    optTpe: Option[Tpe],
+                    alts: List[Alternative[Open.Expr]])
         extends Expr
-    case class TypeAbs(strs: List[String], expr: Expr)  extends Expr
-    case class LocAbs(strs: List[String], expr: Expr)   extends Expr
-    case class TypeApp(expr: Expr, tpes: List[Tpe])     extends Expr
-    case class LocApp(expr: Expr, locs: List[Location]) extends Expr
-    case class Tup(list: List[Expr])                    extends Expr
-    case class Prim(op: Operator, args: List[Expr])     extends Expr
-    case class Lit(literal: Literal)                    extends Expr
+    case class App(fun: Expr,
+                   optTpe: Option[Tpe],
+                   param: Expr,
+                   location: Option[Location])
+        extends Expr
+    case class TypeApp(expr: Expr, optTpe: Option[Tpe], tpes: List[Tpe])
+        extends Expr
+    case class LocApp(expr: Expr, optTpe: Option[Tpe], locs: List[Location])
+        extends Expr
+
+    case class Tup(list: List[Expr])                extends Expr
+    case class Prim(op: Operator, args: List[Expr]) extends Expr
+    case class Lit(literal: Literal)                extends Expr
     case class Constructor(name: String,
                            locs: List[Location],
                            tpes: List[Tpe],
                            expr: List[Expr])
         extends Expr
-    case class Case(expr: Expr, alts: List[Alternative[Open.Expr]]) extends Expr
     case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
         extends Expr
+    case class TypeAbs(strs: List[String], expr: Expr)              extends Expr
+    case class LocAbs(strs: List[String], expr: Expr)               extends Expr
     case class Abs(abss: List[(String, Tpe, Location)], expr: Expr) extends Expr
 
     // Added for native libs
     case class Native(name: String, vars: List[Var]) extends Expr
+
+    implicit val someLocation: Decoder[Option[Location]] = {
+      val some: Decoder[Some[Location]] = (c: HCursor) =>
+        c.downField(("Just")).as[Location].map(Some.apply)
+      val none: Decoder[None.type] = (c: HCursor) => {
+        if (c.downField("Nothing").succeeded)
+          Left(DecodingFailure(s"Cannot decode App", c.history))
+        else Right(None)
+      }
+      some or none.widen
+    }
+    implicit val someTpe: Decoder[Option[Tpe]] = {
+      val some: Decoder[Some[Tpe]] = (c: HCursor) =>
+        c.downField(("Just")).as[Tpe].map(Some.apply)
+      val none: Decoder[None.type] = (c: HCursor) => {
+        if (c.downField("Nothing").succeeded)
+          Left(DecodingFailure(s"Cannot decode App", c.history))
+        else Right(None)
+      }
+      some or none.widen
+    }
 
     private implicit val exprVarD: Decoder[Var] = (c: HCursor) =>
       c.downField("Var").as[String].map(Var.apply)
@@ -52,12 +78,16 @@ object Expr {
         .map(Let.tupled)
     private implicit val exprCaseD: Decoder[Case] = (c: HCursor) =>
       c.downField("Case")
-        .as[(Expr, List[Alternative[Expr.Open.Expr]])]
+        .as[(Expr, Option[Tpe], List[Alternative[Expr.Open.Expr]])]
         .map(Case.tupled)
     private implicit val exprTypeAppD: Decoder[TypeApp] = (c: HCursor) =>
-      c.downField("TypeApp").as[(Expr, List[Tpe])].map(TypeApp.tupled)
+      c.downField("TypeApp")
+        .as[(Expr, Option[Tpe], List[Tpe])]
+        .map(TypeApp.tupled)
     private implicit val exprLocAppD: Decoder[LocApp] = (c: HCursor) =>
-      c.downField("LocApp").as[(Expr, List[Location])].map(LocApp.tupled)
+      c.downField("LocApp")
+        .as[(Expr, Option[Tpe], List[Location])]
+        .map(LocApp.tupled)
     private implicit val exprTupD: Decoder[Tup] = (c: HCursor) =>
       c.downField("Tuple").as[List[Expr]].map(Tup)
     private implicit val exprPrimD: Decoder[Prim] = (c: HCursor) =>
@@ -69,17 +99,9 @@ object Expr {
         .as[(String, List[Location], List[Tpe], List[Expr])]
         .map(Constructor.tupled)
     private implicit val exprAppD: Decoder[App] = (c: HCursor) => {
-      implicit val optionSome: Decoder[Option[Location]] = {
-        val some: Decoder[Some[Location]] = (c: HCursor) =>
-          c.downField(("Just")).as[Location].map(Some.apply)
-        val none: Decoder[None.type] = (c: HCursor) => {
-          if (c.downField("Nothing").succeeded)
-            Left(DecodingFailure(s"Cannot decode App", c.history))
-          else Right(None)
-        }
-        some or none.widen
-      }
-      c.downField("App").as[(Expr, Expr, Option[Location])].map(App.tupled)
+      c.downField("App")
+        .as[(Expr, Option[Tpe], Expr, Option[Location])]
+        .map(App.tupled)
     }
     implicit val exprD: Decoder[Expr] =
       List[Decoder[Expr]](
@@ -101,7 +123,7 @@ object Expr {
     def traversed(expr: Open.Expr): List[Open.Expr] = {
       expr :: (expr match {
         case Open.Var(_) => Nil
-        case Open.App(a, b, _) =>
+        case Open.App(a, _, b, _) =>
           traversed(a) ::: traversed(b)
         case Open.TypeAbs(_, expr) => traversed(expr)
         case Open.LocAbs(_, expr)  => traversed(expr)
@@ -110,13 +132,13 @@ object Expr {
             case Declaration.Binding(_, _, exprB) => traversed(exprB)
           }
           traversedB ::: traversed(expr)
-        case Open.Case(expr, alts) =>
+        case Open.Case(expr, _, alts) =>
           traversed(expr) ::: alts.flatMap {
             case Alternative.Alt(_, _, expr) => traversed(expr)
             case Alternative.TupAlt(_, expr) => traversed(expr)
           }
-        case Open.TypeApp(expr, _)            => traversed(expr)
-        case Open.LocApp(expr, _)             => traversed(expr)
+        case Open.TypeApp(expr, _, _)         => traversed(expr)
+        case Open.LocApp(expr, _, _)          => traversed(expr)
         case Open.Tup(exprs)                  => exprs.flatMap(traversed)
         case Open.Prim(_, args)               => args.flatMap(traversed)
         case Open.Lit(_)                      => Nil
@@ -143,7 +165,7 @@ object Expr {
           }
           unpackTupleList(b)
         case Open.LocAbs(locs, _) => (Nil, locs.map(Location.Var), Nil)
-        case Open.Case(_, alts) =>
+        case Open.Case(_, _, alts) =>
           val a = alts.map { alternative =>
             val params = alternative match {
               case Alternative.Alt(_, params, _) => params
@@ -156,8 +178,8 @@ object Expr {
         case Open.Abs(abss, _) =>
           val bound = abss.map { case (name, _, _) => Open.Var(name) }
           (bound, Nil, bound)
-        case Open.App(_, _, Some(l @ Location.Var(_))) => (Nil, List(l), Nil)
-        case Open.LocApp(_, locs) =>
+        case Open.App(_, _, _, Some(l @ Location.Var(_))) => (Nil, List(l), Nil)
+        case Open.LocApp(_, _, locs) =>
           (Nil, locs.collect { case l @ Location.Var(_) => l }, Nil)
         case _ => (Nil, Nil, Nil)
       }
@@ -250,7 +272,7 @@ object Expr {
         }
 
         typedTerm match {
-          case Open.App(fun, param, l) =>
+          case Open.App(fun, _, param, l) =>
             val (fId, fC, fStore) = helper(id, fun)
             val (pId, pC, pStore) = helper(fId, param)
             (pId, Closed.App(fC, pC, l), fStore ++ pStore)
@@ -263,7 +285,7 @@ object Expr {
             val let           = Closed.Let(newBindings, eC)
 
             (eId, let, nLs ++ eS)
-          case Open.Case(expr, alternatives) =>
+          case Open.Case(expr, _, alternatives) =>
             val (ls, altId, altExprs) = alternatives.foldLeft(
               (Map.empty[LamRef, ClosedLam],
                id,
@@ -280,10 +302,10 @@ object Expr {
             }
             val (eId, eC, eS) = helper(altId, expr)
             (eId, Closed.Case(eC, altExprs), ls ++ eS)
-          case Open.TypeApp(expr, tpes) =>
+          case Open.TypeApp(expr, _, tpes) =>
             val (i, eC, ls) = helper(id, expr)
             (i, Closed.TypeApp(eC, tpes), ls)
-          case Open.LocApp(expr, locs) =>
+          case Open.LocApp(expr, _, locs) =>
             val (i, eC, ls) = helper(id, expr)
             (i, Closed.LocApp(eC, locs), ls)
           case Open.Tup(list) =>

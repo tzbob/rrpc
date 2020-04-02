@@ -35,6 +35,7 @@ trait LibInt {
                             App(
                               Abs(List(("u", UnitTpe, 'l')),
                                   Native("ref", List('x'))),
+                              None,
                               Lit(Literal.Unit),
                               Some('l')
                             ))))
@@ -58,6 +59,7 @@ trait LibInt {
              Abs(List(("x", Tpe.Data("ref", List('l'), List('a')), 'k')),
                  App(
                    Abs(List(("u", UnitTpe, 'l')), Native("!", List('x'))),
+                   None,
                    Lit(Literal.Unit),
                    Some('l')
                  ))
@@ -86,6 +88,7 @@ trait LibInt {
                    App(
                      Abs(List(("u", UnitTpe, 'l')),
                          Native(":=", List('r', 'p'))),
+                     None,
                      Lit(Literal.Unit),
                      Some('l')
                    ))

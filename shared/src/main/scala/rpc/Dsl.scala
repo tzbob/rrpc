@@ -9,7 +9,7 @@ object Dsl {
     * @param term
     */
   implicit class TermApp(term: Expr) {
-    def apply(param: Expr, loc: Location): App = App(term, param, Some(loc))
+    def apply(param: Expr, loc: Location): App = App(term, None, param, Some(loc))
   }
 
   // Syntax for 's.v and automatic forming of terms of symbols where possible

@@ -12,7 +12,7 @@ object TestRunner {
     implicit val (interTerm, store) =
       Closed.compileForInterpreter(term, LamStore.empty)
     val (cf, vf) = fullRunIOFunctions(store)
-    Interpreter.runClient[IO](interTerm, Env.empty)(cf)(vf)
+    Interpreter.runClient[IO](interTerm, Env.empty)(RequestReplyF(cf,vf))
   }
 
   def fullRunIOFunctions(store: LamStore) = {

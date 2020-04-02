@@ -71,7 +71,7 @@ object Interpreter {
     }
   }
 
-  private def runClient[F[_]: Async](expr: Closed.Expr, env: Env)(
+  def runClient[F[_]: Async](expr: Closed.Expr, env: Env)(
       requestReplyF: RequestReplyF[F])(implicit store: LamStore): F[Value] = {
 
     // interpret an external call or a value completely
