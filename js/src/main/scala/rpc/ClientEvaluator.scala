@@ -1,9 +1,10 @@
 package rpc
 
-import cats.effect.{ContextShift, ExitCode, IO, IOApp}
+import cats.effect.{ContextShift, IO}
 import io.circe.{Decoder, Encoder}
-import rpc.Expr.Closed.LamStore
-import rpc.Interpreter.CallInfo
+import rpc.Declaration.TopLevel
+import rpc.Expr.Open
+import rpc.Interpreter.{CallInfo, RequestReplyF}
 import sttp.client._
 import sttp.client.circe._
 import sttp.model.Uri
@@ -14,8 +15,11 @@ object ClientEvaluator {
   private def caller[A: Encoder](uri: Uri)(a: A)(
       implicit ctx: ContextShift[IO]): IO[Either[CallInfo, Value]] = {
 
+    import io.circe.generic.auto._
     implicit val decoder =
       implicitly[Decoder[CallInfo]] either implicitly[Decoder[Value]]
+
+    println(s"calling server: payload $a, url: $uri")
 
     val responseIO = IO.fromFuture(IO {
       basicRequest
@@ -33,9 +37,16 @@ object ClientEvaluator {
     }
   }
 
-  def buildClientRun(store: LamStore, expr: Expr.Closed.Expr, uri: Uri)(
-      implicit ctx: ContextShift[IO]): IO[Value] = {
-    Interpreter.runClient(expr, store, Map.empty)(
-      caller[CallInfo](uri"$uri/interpret"))(caller[Value](uri"$uri/continue"))
+  def buildClientRun(
+      declarations: List[TopLevel[Open.Expr]],
+      uri: Uri,
+      appName: String)(implicit ctx: ContextShift[IO]): IO[Env] = {
+    import io.circe.generic.auto._
+
+    Interpreter
+      .runDeclarations(
+        declarations,
+        RequestReplyF(caller[CallInfo](uri"$uri/$appName/interpret"),
+                      caller[Value](uri"$uri/$appName/continue")))
   }
 }

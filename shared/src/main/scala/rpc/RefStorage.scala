@@ -10,6 +10,12 @@ object RefStorage {
     storage.size - 1
   }
 
-  def read(address: Int): Value         = storage(address)
-  def write(address: Int, value: Value) = storage(address) = value
+  def read(address: Int): Value         = {
+    pprint.log("reading" -> storage)
+    storage(address)
+  }
+  def write(address: Int, value: Value) = {
+    pprint.log(address -> value)
+    storage(address) = value
+  }
 }

@@ -1,13 +1,13 @@
 package examples
 
 import rpc._
-
-import io.circe.generic.auto._, io.circe.parser._
+import io.circe.parser._
+import rpc.Expr.Open
 
 object Simple extends RpcApp with RpcAppInt {
 
   val hostname = "localhost"
-  val port = 8080
+  val port     = 8080
   def rpc(args: List[String]): Expr.Open.Expr = {
 
     val exampleHelloWorld =
@@ -26,7 +26,8 @@ object Simple extends RpcApp with RpcAppInt {
                                        {"Just": {"Location": "client"}}]}]}]
         """
 
-    decode[List[Declaration.TopLevel]](exampleHelloWorld)
+    import HaskellJsonDecoders._
+    decode[List[Declaration.TopLevel[Open.Expr]]](exampleHelloWorld)
 
     // go through all top level decls to build environment, then execute main
     ???

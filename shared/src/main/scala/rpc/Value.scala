@@ -2,8 +2,9 @@ package rpc
 
 import rpc.Expr.Closed.{LamRef, LamStore}
 import io.circe._
+import io.circe.generic.JsonCodec
 
-sealed trait Value
+@JsonCodec sealed trait Value
 
 object Value {
   case class Constant(lit: Literal)                     extends Value

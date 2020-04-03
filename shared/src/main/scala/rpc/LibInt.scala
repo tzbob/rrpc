@@ -4,12 +4,12 @@ import rpc.Expr.Closed.LamStore
 import rpc.Expr.{Closed, Open}
 import rpc.error.MissingLibError
 
-case class LibData(expr: Open.Expr, implementation: List[Value] => Value)
+case class LibData[E](expr: E, implementation: List[Value] => Value)
 
 trait LibInt {
   import Dsl._
   import Open._
-  val sharedFunctions: Map[String, LibData] = Map(
+  val sharedFunctions: Map[String, LibData[Open.Expr]] = Map(
     ("print",
      LibData(
        LocAbs(List("l"),
@@ -96,6 +96,7 @@ trait LibInt {
            )
          )
        ), { (vs: List[Value]) =>
+         pprint.log(vs)
          vs match {
            case List(Value.Constructed("Ref",
                                        List(Value.Constant(Literal.Int(addr)))),
@@ -107,24 +108,31 @@ trait LibInt {
      ))
   )
 
-  val nativeFunctions: Map[String, LibData]
+  val nativeFunctions: Map[String, LibData[Open.Expr]]
 
-  def functions: Map[String, LibData] = sharedFunctions ++ nativeFunctions
+  def functions: Map[String, LibData[Open.Expr]] =
+    sharedFunctions ++ nativeFunctions
+
+  private lazy val (store, lamRefs): (LamStore, Map[String, Closed.LamRef]) =
+    functions.foldLeft(LamStore.empty -> Map.empty[String, Closed.LamRef]) {
+      case ((store, map), (key, data)) =>
+        val (expr, nStore) = Closed.compileForInterpreter(data.expr, store)
+        // this is fine since all functions _should_ compile to lamrefs
+        val lamRef = expr.asInstanceOf[Closed.LamRef]
+        nStore -> (map + (key -> lamRef))
+    }
+
+  lazy val libraryStore = store
 
   def openExpr(name: String) = functions.get(name) match {
     case None       => throw MissingLibError(name)
     case Some(data) => data.expr
   }
 
-  def expr(name: String): LamStore => (Closed.LamRef, LamStore) =
-    functions.get(name) match {
-      case None => throw MissingLibError(name)
-      case Some(data) =>
-        (store: LamStore) =>
-          {
-            val (expr, nStore) = Closed.compileForInterpreter(data.expr, store)
-            expr.asInstanceOf[Closed.LamRef] -> nStore
-          }
+  def expr(name: String): Closed.LamRef =
+    lamRefs.get(name) match {
+      case None     => throw MissingLibError(name)
+      case Some(lr) => lr
     }
 
   def fun(name: String): List[Value] => Value = {

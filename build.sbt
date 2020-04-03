@@ -40,11 +40,12 @@ lazy val rpcJVM = rpc.jvm
     scalaJSProjects := Seq(rpcJS),
     devCommands in scalaJSPipeline += "~reStart",
     devCommands in scalaJSPipeline += "~testQuick",
-    // pipelineStages in Assets := Seq(scalaJSPipeline),
+     pipelineStages in Assets := Seq(scalaJSPipeline),
     libraryDependencies ++= Seq(
-      "org.http4s" %% "http4s-dsl"          % http4sVersion,
-      "org.http4s" %% "http4s-blaze-server" % http4sVersion,
-      "org.http4s" %% "http4s-circe"        % http4sVersion,
+      "org.http4s"  %% "http4s-dsl"          % http4sVersion,
+      "org.http4s"  %% "http4s-blaze-server" % http4sVersion,
+      "org.http4s"  %% "http4s-circe"        % http4sVersion,
+      "com.lihaoyi" %% "os-lib"              % "0.6.2"
     )
   )
   .enablePlugins(SbtWeb)

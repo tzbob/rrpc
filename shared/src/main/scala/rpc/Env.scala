@@ -1,5 +1,6 @@
 package rpc
 
+import io.circe.generic.JsonCodec
 import rpc.Expr.Closed
 
 case class Env(tpes: Map[String, Tpe],
@@ -25,14 +26,15 @@ case class Env(tpes: Map[String, Tpe],
 object Env {
   val empty: Env = Env(Map.empty, Map.empty, Map.empty)
 
+  @JsonCodec
   case class Minimal(tpes: Map[String, Tpe],
                      locs: Map[String, Location],
                      values: Map[String, Value]) {
     def add(k: String, value: Value): Minimal =
       copy(values = values + (k -> value))
-    override def toString: String = {
-      s"Env.Minimal($tpes, $locs, ${values.keys}(values omitted))"
-    }
+//    override def toString: String = {
+//      s"Env.Minimal($tpes, $locs, ${values.keys}(values omitted))"
+//    }
     def toEnv: Env = Env(tpes, locs, values)
   }
   object Minimal { val empty: Minimal = Env.minimize(Env.empty, Nil, Nil, Nil) }

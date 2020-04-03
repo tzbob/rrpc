@@ -6,7 +6,6 @@ import scala.io.Source
 import scala.sys.process.Process
 
 object PolyRpcCaller {
-
   case class Config(path: String, extension: String)
 
   def toFileLocation(name: String)(implicit c: Config) =

@@ -1,20 +1,9 @@
 package rpc
 
-import io.circe.{Decoder, DecodingFailure, HCursor}
 import rpc.error.TypeError
 
 sealed trait Operator
 object Operator {
-  private def opD(op: Operator): Decoder[Operator] =
-    (c: HCursor) => {
-      val opName = op.getClass.getSimpleName.dropRight(1)
-      c.as[String].flatMap { str =>
-        if (str != s"${opName}PrimOp")
-          Left(DecodingFailure(s"Cannot decode $op", c.history))
-        else Right(op)
-      }
-    }
-
   private def binary(
       f: (Literal, Literal) => Literal): List[Literal] => Literal = {
     case List(l1, l2) => f(l1, l2)
@@ -69,9 +58,4 @@ object Operator {
   case object Mul extends Operator //{l}. (Int, Int) -l-> Int
   case object Div extends Operator //{l}. (Int, Int) -l-> Int
   case object Neg extends Operator //{l}. Int -l-> Int
-
-  implicit val opDImpl: Decoder[Operator] =
-    List(Not, Or, And, Eq, Neq, Lt, Le, Gt, Ge, Add, Sub, Mul, Div, Neg)
-      .map(opD)
-      .reduceLeft(_ or _)
 }

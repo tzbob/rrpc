@@ -1,7 +1,7 @@
 package rpc
 
-import cats.syntax.functor._
-import io.circe.{Decoder, DecodingFailure, HCursor, KeyDecoder, KeyEncoder}
+import io.circe.generic.JsonCodec
+import io.circe.{KeyDecoder, KeyEncoder}
 object Expr {
 
   object Open {
@@ -40,85 +40,6 @@ object Expr {
 
     // Added for native libs
     case class Native(name: String, vars: List[Var]) extends Expr
-
-    implicit val someLocation: Decoder[Option[Location]] = {
-      val some: Decoder[Some[Location]] = (c: HCursor) =>
-        c.downField(("Just")).as[Location].map(Some.apply)
-      val none: Decoder[None.type] = (c: HCursor) => {
-        if (c.downField("Nothing").succeeded)
-          Left(DecodingFailure(s"Cannot decode App", c.history))
-        else Right(None)
-      }
-      some or none.widen
-    }
-    implicit val someTpe: Decoder[Option[Tpe]] = {
-      val some: Decoder[Some[Tpe]] = (c: HCursor) =>
-        c.downField(("Just")).as[Tpe].map(Some.apply)
-      val none: Decoder[None.type] = (c: HCursor) => {
-        if (c.downField("Nothing").succeeded)
-          Left(DecodingFailure(s"Cannot decode App", c.history))
-        else Right(None)
-      }
-      some or none.widen
-    }
-
-    private implicit val exprVarD: Decoder[Var] = (c: HCursor) =>
-      c.downField("Var").as[String].map(Var.apply)
-    private implicit val exprTypeAbsD: Decoder[TypeAbs] = (c: HCursor) =>
-      c.downField("TypeAbs").as[(List[String], Expr)].map(TypeAbs.tupled)
-    private implicit val exprLocAbsD: Decoder[LocAbs] = (c: HCursor) =>
-      c.downField("LocAbs").as[(List[String], Expr)].map(LocAbs.tupled)
-    private implicit val exprAbsD: Decoder[Abs] = (c: HCursor) =>
-      c.downField("Abs")
-        .as[(List[(String, Tpe, Location)], Expr)]
-        .map(Abs.tupled)
-    private implicit val exprLetD: Decoder[Let] = (c: HCursor) =>
-      c.downField("Let")
-        .as[(List[Declaration.Binding[Open.Expr]], Expr)]
-        .map(Let.tupled)
-    private implicit val exprCaseD: Decoder[Case] = (c: HCursor) =>
-      c.downField("Case")
-        .as[(Expr, Option[Tpe], List[Alternative[Expr.Open.Expr]])]
-        .map(Case.tupled)
-    private implicit val exprTypeAppD: Decoder[TypeApp] = (c: HCursor) =>
-      c.downField("TypeApp")
-        .as[(Expr, Option[Tpe], List[Tpe])]
-        .map(TypeApp.tupled)
-    private implicit val exprLocAppD: Decoder[LocApp] = (c: HCursor) =>
-      c.downField("LocApp")
-        .as[(Expr, Option[Tpe], List[Location])]
-        .map(LocApp.tupled)
-    private implicit val exprTupD: Decoder[Tup] = (c: HCursor) =>
-      c.downField("Tuple").as[List[Expr]].map(Tup)
-    private implicit val exprPrimD: Decoder[Prim] = (c: HCursor) =>
-      c.downField("Prim").as[(Operator, List[Expr])].map(Prim.tupled)
-    private implicit val exprLitD: Decoder[Lit] = (c: HCursor) =>
-      c.downField("Lit").as[Literal].map(Lit)
-    private implicit val exprDataD: Decoder[Constructor] = (c: HCursor) =>
-      c.downField("Constr")
-        .as[(String, List[Location], List[Tpe], List[Expr])]
-        .map(Constructor.tupled)
-    private implicit val exprAppD: Decoder[App] = (c: HCursor) => {
-      c.downField("App")
-        .as[(Expr, Option[Tpe], Expr, Option[Location])]
-        .map(App.tupled)
-    }
-    implicit val exprD: Decoder[Expr] =
-      List[Decoder[Expr]](
-        exprVarD.widen,
-        exprTypeAbsD.widen,
-        exprLocAbsD.widen,
-        exprAbsD.widen,
-        exprCaseD.widen,
-        exprTypeAppD.widen,
-        exprLocAppD.widen,
-        exprTupD.widen,
-        exprLitD.widen,
-        exprDataD.widen,
-        exprAppD.widen,
-        exprLetD.widen,
-        exprPrimD.widen,
-      ).reduceLeft(_ or _)
 
     def traversed(expr: Open.Expr): List[Open.Expr] = {
       expr :: (expr match {
@@ -209,7 +130,7 @@ object Expr {
     case class Let(binding: List[Declaration.Binding[Closed.Expr]], expr: Expr)
         extends Expr
     case class Native(name: String, vars: List[Var]) extends Expr
-    case class LamRef(id: Int)                       extends Expr
+    @JsonCodec case class LamRef(id: Int)            extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
                          boundVars: List[Closed.Var],
@@ -226,7 +147,6 @@ object Expr {
     type LamStore = Map[LamRef, Closed.ClosedLam]
 
     import io.circe.syntax._
-    import io.circe.generic.auto._
     import io.circe.parser.decode
     implicit val keyLamRefEncoder = new KeyEncoder[Closed.LamRef] {
       override def apply(key: Closed.LamRef): String = key.asJson.noSpaces

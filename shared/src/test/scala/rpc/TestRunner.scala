@@ -11,8 +11,7 @@ object TestRunner {
   def fullRun(term: Open.Expr): IO[Value] = {
     implicit val (interTerm, store) =
       Closed.compileForInterpreter(term, LamStore.empty)
-    val (cf, vf) = fullRunIOFunctions(store)
-    Interpreter.runClient[IO](interTerm, Env.empty)(RequestReplyF(cf,vf))
+    Interpreter.runClient[IO](interTerm, Env.empty)(fullRunIOFunctions(store))
   }
 
   def fullRunIOFunctions(store: LamStore) = {
@@ -32,7 +31,7 @@ object TestRunner {
       IO(qExternal(Interpreter.performServerRequest(callInfo)(store)))
     val valueF = (value: Value) =>
       IO(qExternal(Interpreter.handleClientResponse[IO](value, q)))
-    (callInfoF, valueF)
+    RequestReplyF(callInfoF, valueF)
   }
 
 }

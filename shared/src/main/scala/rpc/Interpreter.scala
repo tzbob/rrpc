@@ -2,6 +2,7 @@ package rpc
 
 import cats.effect.Async
 import cats.implicits._
+import io.circe.generic.JsonCodec
 import rpc.Declaration.TopLevel
 import rpc.Expr.Closed.{ClosedLam, LamRef, LamStore}
 import rpc.Expr.{Closed, Open}
@@ -11,7 +12,7 @@ import rpc.error.{CaseError, MissingValueError, TypeError}
 import scala.collection.mutable
 
 object Interpreter {
-  case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
+  @JsonCodec case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
   /**
@@ -24,50 +25,64 @@ object Interpreter {
       requestF: CallInfo => F[Either[CallInfo, Value]],
       replyF: Value => F[Either[CallInfo, Value]])
 
-  def runDeclarations[F[_]: Async](decls: List[TopLevel])(
-      asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
-    decls.foldLeft(Async[F].pure(Env.empty -> LamStore.empty)) { (accIO, dec) =>
-      accIO.flatMap {
-        case (acc, store) =>
-          Interpreter.processDeclaration(dec, acc, store)(asyncFuns)
+  def runDeclarations[F[_]: Async](decls: List[TopLevel[Open.Expr]],
+                                   asyncFuns: RequestReplyF[F]): F[Env] = {
+    val (closedDecls, store) = compileDeclarations(decls)
+    closedDecls
+      .foldLeft(Async[F].pure(Env.empty)) { (accIO, dec) =>
+        accIO.flatMap { acc =>
+          Interpreter.processDeclaration(dec, acc, store, asyncFuns)
+        }
       }
-    }
   }
 
-  private def processDeclaration[F[_]: Async](decl: TopLevel,
-                                              env: Env,
-                                              store: LamStore)(
-      asyncFuns: LamStore => RequestReplyF[F]): F[(Env, LamStore)] = {
+  def compileDeclarations(decls: List[TopLevel[Open.Expr]])
+    : (List[TopLevel[Closed.Expr]], LamStore) =
+    decls.foldLeft(List.empty[TopLevel[Closed.Expr]],
+                   (Lib: LibInt).libraryStore) {
+      case ((list, store), topLevel) =>
+        val (expr, nStore) = compileDeclaration(topLevel, store)
+        (list :+ expr, nStore)
+    }
+
+  private def compileDeclaration(
+      decl: TopLevel[Open.Expr],
+      store: LamStore): (TopLevel[Closed.Expr], LamStore) =
     decl match {
+      case b @ TopLevel.Binding(_) =>
+        Declaration.TopLevel
+          .compileBinding(b.asInstanceOf[TopLevel.Binding[Open.Expr]], store)
+      case TopLevel.DataType(d) => TopLevel.DataType[Closed.Expr](d) -> store
+      case TopLevel.Library(n, t) =>
+        TopLevel.Library[Closed.Expr](n, t) -> store
+    }
+
+  private def processDeclaration[F[_]: Async](
+      decl: TopLevel[Closed.Expr],
+      env: Env,
+      store: LamStore,
+      asyncFuns: RequestReplyF[F]): F[Env] = {
+    decl match {
+      case TopLevel.DataType(_) => Async[F].pure(env)
       // Tie the recursive not through a recursive environment on a closure
       case TopLevel.Library(name, _) =>
-        val (expr, extStore) = (Lib: LibInt).expr(name)(store)
-
+        val lamRef = (Lib: LibInt).expr(name)
+        val enableRecursionEnv =
+          Closure.addRecursiveClosure(name, lamRef, env, store)
+        Async[F].pure(enableRecursionEnv)
+      // Tie the recursive knot through a recursive environment on a closure
+      case TopLevel.Binding(Declaration.Binding(name, _, expr)) =>
         val enableRecursionEnv = expr match {
           case lr @ LamRef(_) =>
-            Closure.addRecursiveClosure(name, lr, env, extStore)
-          case _ => env
-        }
-        Async[F].pure(enableRecursionEnv -> extStore)
-      // Tie the recursive not through a recursive environment on a closure
-      case b @ TopLevel.Binding(_) =>
-        val (TopLevel.Binding(Declaration.Binding(name, _, expr)), extStore) =
-          Declaration.TopLevel
-            .compileBinding(b.asInstanceOf[TopLevel.Binding[Open.Expr]], store)
-
-        val enableRecursionEnv = expr match {
-          case lr @ LamRef(_) =>
-            Closure.addRecursiveClosure(name, lr, env, extStore)
+            Closure.addRecursiveClosure(name, lr, env, store)
           case _ => env
         }
 
-        implicit val s = extStore
-        val valueF =
-          runClient(expr, enableRecursionEnv)(asyncFuns(extStore))
+        implicit val s = store
+        val valueF     = runClient(expr, enableRecursionEnv)(asyncFuns)
         valueF.map { v =>
-          env.add(name, v) -> extStore
+          env.add(name, v)
         }
-      case TopLevel.DataType(_) => Async[F].pure(env -> store)
     }
   }
 
@@ -133,6 +148,8 @@ object Interpreter {
       localLoc: Location.Loc)(cont: Cont[Value])(
       implicit store: LamStore): Either[ExternalCall, Value] = {
 
+    println(s"interpreting: $term")
+
     def interpretMultiple(results: List[Closed.Expr])(
         cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
       def helper(values: List[Value], results: List[Closed.Expr])(
@@ -150,7 +167,12 @@ object Interpreter {
     term match {
       case Closed.Native(name, vars) =>
         interpretMultiple(vars) { vals =>
-          cont((Lib: LibInt).fun(name)(vals))
+          cont {
+            pprint.log("Starting Lib")
+            val x = (Lib: LibInt).fun(name)(vals)
+            pprint.log("Ending Lib")
+            x
+          }
         }
       case Closed.TypeApp(expr, List(tpe)) =>
         interpretToValueOrExternalCall(expr, env, localLoc) {
@@ -286,6 +308,7 @@ object Interpreter {
 
   def performServerRequest(callInfo: CallInfo)(
       implicit store: LamStore): Either[ExternalCall, Value] = {
+    pprint.log(callInfo)
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
       case Some(Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
