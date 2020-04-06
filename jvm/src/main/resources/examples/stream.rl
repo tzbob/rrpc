@@ -70,7 +70,7 @@ server_list1 : Stream {server} [Int]
 
 ;
 
-test1 : Int
+main : Int
      = hd_stream {client} [Int]
         (tl_stream {client} [Int]
 	  (take_stream {client client} [Int]

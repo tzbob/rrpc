@@ -37,7 +37,9 @@ object Env {
 //    }
     def toEnv: Env = Env(tpes, locs, values)
   }
-  object Minimal { val empty: Minimal = Env.minimize(Env.empty, Nil, Nil, Nil) }
+  object Minimal {
+    val empty: Minimal = Env.minimize(Env.empty, Nil, Nil, Nil)
+  }
 
   def minimize(source: Env,
                tpes: List[Tpe.Var],

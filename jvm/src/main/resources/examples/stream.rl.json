@@ -1172,7 +1172,7 @@
                                                                    {"Just": {"Location": "server"}}]}]},
                                                  {"Just": {"Location": "server"}}]}]},
                                {"Just": {"Location": "client"}}]}]},
- {"BindingTopLevel": ["test1", {"ConType": ["Int", [], []]},
+ {"BindingTopLevel": ["main", {"ConType": ["Int", [], []]},
                       {"App": [{"TypeApp": [{"LocApp": [{"Var": "hd_stream"},
                                                         {"Just": {"LocAbsType": [["l"],
                                                                                  {"TypeAbsType": [["a"],

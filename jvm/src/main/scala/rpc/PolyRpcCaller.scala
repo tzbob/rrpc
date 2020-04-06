@@ -6,7 +6,7 @@ import scala.io.Source
 import scala.sys.process.Process
 
 object PolyRpcCaller {
-  case class Config(path: String, extension: String)
+  case class Config(path: String, extension: String, binPath: String)
 
   def toFileLocation(name: String)(implicit c: Config) =
     s"${c.path}/$name.${c.extension}"
@@ -28,7 +28,8 @@ object PolyRpcCaller {
   }
 
   private def generateTypedAST(name: String)(implicit c: Config) = {
-    val bin      = s"jvm/src/main/resources/${OsUtil.simpleOs()}/polyrpc-exe${OsUtil.binSuffix()}"
+    val path     = s"${c.binPath}/${OsUtil.simpleOs()}"
+    val bin      = s"$path/polyrpc-exe${OsUtil.binSuffix()}"
     val location = toFileLocation(name)
     Process(s"$bin --output-json $location").lazyLines.mkString("\n")
   }

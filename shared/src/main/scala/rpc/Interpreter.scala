@@ -308,7 +308,6 @@ object Interpreter {
 
   def performServerRequest(callInfo: CallInfo)(
       implicit store: LamStore): Either[ExternalCall, Value] = {
-    pprint.log(callInfo)
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
       case Some(Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>

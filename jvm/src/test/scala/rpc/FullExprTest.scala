@@ -8,7 +8,7 @@ import rpc.error.CaseError
 
 class FullExprTest extends AnyFunSuite {
   implicit val config =
-    PolyRpcCaller.Config("jvm/src/main/resources/examples", "rl")
+    PolyRpcCaller.Config("jvm/src/main/resources/examples", "rl", "jvm/src/main/resources/")
 
   private def runProgram(file: String, reset: Boolean = false) = {
     val jsonLoad = PolyRpcCaller.load(file, reset)
@@ -119,7 +119,7 @@ class FullExprTest extends AnyFunSuite {
     import Dsl._
     import Value._
     val result = runProgram("stream")
-    assert(result.values("test1") === Constant(3))
+    assert(result.values("main") === Constant(3))
   }
 
   test("Test Ref") {
