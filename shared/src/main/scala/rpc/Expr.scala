@@ -30,7 +30,8 @@ object Expr {
     case class Constructor(name: String,
                            locs: List[Location],
                            tpes: List[Tpe],
-                           expr: List[Expr])
+                           expr: List[Expr],
+                           tpes2: List[Tpe])
         extends Expr
     case class Let(bindings: List[Declaration.Binding[Open.Expr]], expr: Expr)
         extends Expr
@@ -58,14 +59,14 @@ object Expr {
             case Alternative.Alt(_, _, expr) => traversed(expr)
             case Alternative.TupAlt(_, expr) => traversed(expr)
           }
-        case Open.TypeApp(expr, _, _)         => traversed(expr)
-        case Open.LocApp(expr, _, _)          => traversed(expr)
-        case Open.Tup(exprs)                  => exprs.flatMap(traversed)
-        case Open.Prim(_, args)               => args.flatMap(traversed)
-        case Open.Lit(_)                      => Nil
-        case Open.Constructor(_, _, _, exprs) => exprs.flatMap(traversed)
-        case Open.Native(_, vars)             => vars.flatMap(traversed)
-        case Abs(List((_, _, _)), expr)       => traversed(expr)
+        case Open.TypeApp(expr, _, _)            => traversed(expr)
+        case Open.LocApp(expr, _, _)             => traversed(expr)
+        case Open.Tup(exprs)                     => exprs.flatMap(traversed)
+        case Open.Prim(_, args)                  => args.flatMap(traversed)
+        case Open.Lit(_)                         => Nil
+        case Open.Constructor(_, _, _, exprs, _) => exprs.flatMap(traversed)
+        case Open.Native(_, vars)                => vars.flatMap(traversed)
+        case Abs(List((_, _, _)), expr)          => traversed(expr)
       })
     }
 
@@ -235,7 +236,7 @@ object Expr {
             val (ls, id, nargs) = buildExprList(args)
             (id, Closed.Prim(op, nargs), ls)
           case Open.Lit(literal) => (id, Closed.Lit(literal), Map.empty)
-          case Open.Constructor(name, locs, tpes, exprs) =>
+          case Open.Constructor(name, locs, tpes, exprs, _) =>
             val (ls, id, nExprs) = buildExprList(exprs)
             (id, Closed.Constructor(name, locs, tpes, nExprs), ls)
           case Open.Var(name) => (id, Closed.Var(name), Map.empty)

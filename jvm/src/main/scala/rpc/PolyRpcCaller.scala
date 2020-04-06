@@ -11,7 +11,7 @@ object PolyRpcCaller {
   def toFileLocation(name: String)(implicit c: Config) =
     s"${c.path}/$name.${c.extension}"
   def toJsonLocation(name: String)(implicit c: Config) =
-    s"${toFileLocation(name)}.json"
+    s"${c.path}/$name.json"
 
   // TODO: write this using non-blocking and error-handling IO
   def load(name: String, reset: Boolean = false)(implicit c: Config): String = {

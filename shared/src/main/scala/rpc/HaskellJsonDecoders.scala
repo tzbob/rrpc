@@ -97,8 +97,8 @@ object HaskellJsonDecoders {
 
   implicit val tlD: Decoder[TopLevel[Open.Expr]] =
     List[Decoder[TopLevel[Open.Expr]]](tlDataTypeD.widen,
-                                       tlBindingD.widen,
-                                       tlLibD.widen)
+                                       tlLibD.widen,
+                                       tlBindingD.widen)
       .reduceLeft(_ or _)
 
   implicit val constructorD: Decoder[Declaration.Constructor] = (c: HCursor) =>
@@ -159,7 +159,7 @@ object HaskellJsonDecoders {
     c.downField("Lit").as[Literal].map(Lit)
   private implicit val exprDataD: Decoder[Open.Constructor] = (c: HCursor) =>
     c.downField("Constr")
-      .as[(String, List[Location], List[Tpe], List[Expr])]
+      .as[(String, List[Location], List[Tpe], List[Expr], List[Tpe])]
       .map(Open.Constructor.tupled)
   private implicit val exprAppD: Decoder[App] = (c: HCursor) => {
     c.downField("App")
