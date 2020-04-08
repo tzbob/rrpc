@@ -9,7 +9,6 @@ object Expr {
 
     case class Var(name: String) extends Expr
 
-    // FIXME: add maybe tpe to case + apps
     case class Case(expr: Expr,
                     optTpe: Option[Tpe],
                     alts: List[Alternative[Open.Expr]])

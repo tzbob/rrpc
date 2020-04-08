@@ -11,11 +11,9 @@ object RefStorage {
   }
 
   def read(address: Int): Value         = {
-    pprint.log("reading" -> storage)
     storage(address)
   }
   def write(address: Int, value: Value) = {
-    pprint.log(address -> value)
     storage(address) = value
   }
 }

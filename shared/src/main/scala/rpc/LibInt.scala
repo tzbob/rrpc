@@ -15,7 +15,6 @@ trait LibInt {
        LocAbs(List("l"),
               Abs(List(("x", '_', 'l')), Native("print", List('x')))), {
          (ls: List[Value]) =>
-           println(ls.head)
            Value.Constant(Literal.Unit)
        }
      )),
@@ -96,7 +95,6 @@ trait LibInt {
            )
          )
        ), { (vs: List[Value]) =>
-         pprint.log(vs)
          vs match {
            case List(Value.Constructed("Ref",
                                        List(Value.Constant(Literal.Int(addr)))),

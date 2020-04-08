@@ -148,8 +148,6 @@ object Interpreter {
       localLoc: Location.Loc)(cont: Cont[Value])(
       implicit store: LamStore): Either[ExternalCall, Value] = {
 
-    println(s"interpreting: $term")
-
     def interpretMultiple(results: List[Closed.Expr])(
         cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
       def helper(values: List[Value], results: List[Closed.Expr])(
@@ -168,10 +166,7 @@ object Interpreter {
       case Closed.Native(name, vars) =>
         interpretMultiple(vars) { vals =>
           cont {
-            pprint.log("Starting Lib")
-            val x = (Lib: LibInt).fun(name)(vals)
-            pprint.log("Ending Lib")
-            x
+            (Lib: LibInt).fun(name)(vals)
           }
         }
       case Closed.TypeApp(expr, List(tpe)) =>
@@ -179,7 +174,8 @@ object Interpreter {
           case Closure(lr, closedEnv) =>
             val ClosedLam(_, body, _, List(tvar), _, _, _, _) = store(lr)
 
-            val tEnv = closedEnv.toEnv.add(tvar.str, tpe)
+            val recursiveEnv = Env.applyRecursiveNames(env, closedEnv)
+            val tEnv         = recursiveEnv.toEnv.add(tvar.str, tpe)
             interpretToValueOrExternalCall(body, tEnv, localLoc)(cont)
           case e => throw TypeError(e, "Type Abstraction")
         }
@@ -191,7 +187,8 @@ object Interpreter {
               case l @ Location.Loc(_) => l
               case Location.Var(name)  => env.locs(name)
             }
-            val lEnv = closedEnv.toEnv.add(lvar.name, loc)
+            val recursiveEnv = Env.applyRecursiveNames(env, closedEnv)
+            val lEnv         = recursiveEnv.toEnv.add(lvar.name, loc)
             interpretToValueOrExternalCall(body, lEnv, localLoc)(cont)
           case e => throw TypeError(e, "Location Abstraction")
         }
@@ -259,7 +256,12 @@ object Interpreter {
         interpretMultiple(bindings.map(_.expr)) { values =>
           val newEnv = bindings.zip(values).foldLeft(env) {
             case (accEnv, (b, value)) =>
-              accEnv.add(b.name, value)
+              val accEnvRec = value match {
+                case Value.Closure(_, _) =>
+                  accEnv.addRecursiveName(b.name)
+                case _ => accEnv
+              }
+              accEnvRec.add(b.name, value)
           }
           interpretToValueOrExternalCall(expr, newEnv, localLoc)(cont)
         }
@@ -279,10 +281,12 @@ object Interpreter {
         cont(Closure(lr, minimal))
       case Closed.App(fun, param, Some(locV)) =>
         interpretToValueOrExternalCall(fun, env, localLoc) {
-          case Closure(lr, closedEnv) =>
+          case c @ Closure(lr, closedEnv) =>
             interpretToValueOrExternalCall(param, env, localLoc) { value =>
               val Closed.ClosedLam(_, body, List(bound), _, _, _, _, _) =
                 store(lr)
+
+              val recursiveEnv = Env.applyRecursiveNames(env, closedEnv)
 
               val loc = locV match {
                 case l @ Location.Loc(_) => l
@@ -291,12 +295,12 @@ object Interpreter {
               if (loc == localLoc) {
                 interpretToValueOrExternalCall(
                   body,
-                  closedEnv.toEnv.add(bound.name, value),
+                  recursiveEnv.toEnv.add(bound.name, value),
                   localLoc)(cont)
               } else {
                 Left(
                   ExternalCall(
-                    CallInfo(lr, value, closedEnv.add(bound.name, value)),
+                    CallInfo(lr, value, recursiveEnv.add(bound.name, value)),
                     cont
                   ))
               }

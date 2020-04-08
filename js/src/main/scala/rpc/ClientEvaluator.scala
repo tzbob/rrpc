@@ -1,5 +1,7 @@
 package rpc
 
+import java.util.UUID
+
 import cats.effect.{ContextShift, IO}
 import io.circe.{Decoder, Encoder}
 import rpc.Declaration.TopLevel
@@ -12,18 +14,18 @@ import sttp.model.Uri
 object ClientEvaluator {
   private implicit val backend = FetchBackend()
 
+  private val identifier = UUID.randomUUID()
+
   private def caller[A: Encoder](uri: Uri)(a: A)(
       implicit ctx: ContextShift[IO]): IO[Either[CallInfo, Value]] = {
 
-    import io.circe.generic.auto._
+    implicit val idEnc = implicitly[Encoder[Identified[A]]]
     implicit val decoder =
       implicitly[Decoder[CallInfo]] either implicitly[Decoder[Value]]
 
-    println(s"calling server: payload $a, url: $uri")
-
     val responseIO = IO.fromFuture(IO {
       basicRequest
-        .body(a)
+        .body(Identified(identifier, a))
         .post(uri)
         .response(asJson[Either[CallInfo, Value]])
         .send()
@@ -41,8 +43,6 @@ object ClientEvaluator {
       declarations: List[TopLevel[Open.Expr]],
       uri: Uri,
       appName: String)(implicit ctx: ContextShift[IO]): IO[Env] = {
-    import io.circe.generic.auto._
-
     Interpreter
       .runDeclarations(
         declarations,

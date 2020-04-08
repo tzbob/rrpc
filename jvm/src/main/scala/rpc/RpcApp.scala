@@ -29,7 +29,6 @@ trait RpcApp extends RpcAppInt {
     val programTopLevelEithers =
       os.walk(programs).filter(_.ext == "rl").map { path =>
         val programName = path.baseName.takeWhile(_ != '.')
-        pprint.log(programName)
 
         implicit val cfg = Config(programs.toString, "rl", "src/main/resources")
         val result       = PolyRpcCaller.load(programName)

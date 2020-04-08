@@ -12,14 +12,13 @@ object Value {
   object Closure {
     def addRecursiveClosure(name: String,
                             lamRef: LamRef,
-                            env: Env,
+                            envTarget: Env,
                             store: LamStore): Env = {
-      val closure = Closure(lamRef, null)
-      val recEnv  = env.add(name, closure)
+      val env     = envTarget.addRecursiveName(name)
       val cl      = store(lamRef)
-      val minimal = Env.minimize(recEnv, cl.tpeVars, cl.locVars, cl.freeVars)
-      closure.env = minimal
-      recEnv
+      val minimal = Env.minimize(env, cl.tpeVars, cl.locVars, cl.freeVars)
+      val closure = Closure(lamRef, minimal)
+      env.add(name, closure)
     }
   }
   case class Constructed(tag: String, args: List[Value]) extends Value
