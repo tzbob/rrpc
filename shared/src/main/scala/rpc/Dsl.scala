@@ -20,6 +20,8 @@ object Dsl {
     Location.Var(symbol.toString)
 
   val BoolTpe = Tpe.Data("Bool", Nil, Nil)
+  val IntTpe = Tpe.Data("Int", Nil, Nil)
+  val StringTpe = Tpe.Data("String", Nil, Nil)
   val UnitTpe = Tpe.Data("Unit", Nil, Nil)
 
   // Automatic forming of constant terms

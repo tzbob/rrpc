@@ -42,10 +42,10 @@ object ServerEvaluator {
                 <meta charset='UTF-8'>
                 <script src='/assets/client.js'></script>
                 </head>
-                <body><code>$program</code>
+                <body><div id=body><code>$program</code>
                 <h2>Evaluated to:</h2>
                 <h1 id='result'>Calculating...</h1>
-                </body>
+                </div></body>
                 </html>
             """,
             `Content-Type`(MediaType.text.html)

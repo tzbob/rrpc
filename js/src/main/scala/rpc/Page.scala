@@ -1,0 +1,100 @@
+package rpc
+
+import izumi.logstage.api.IzLogger
+import org.scalajs.dom
+import rpc.Value.{Constant, Constructed}
+import snabbdom.VNode
+
+import scala.scalajs.js
+import scala.scalajs.js.JSConverters._
+import scala.scalajs.js.|
+
+case class Page(init: Value, view: Value, update: Value, mountPoint: String)
+
+object Page {
+  private val logger = IzLogger()
+
+  def pageFromValue(v: Value): Option[Page] = v match {
+    case Constructed("Page",
+                     List(init, update, view, Constant(Literal.String(mnt)))) =>
+      Some(Page(init, update, view, mnt))
+    case _ => None
+  }
+
+  def htmlFromValue(v: Value)(
+      onEvent: (dom.Event, Value.Closure) => Unit): VNode = {
+    v match {
+      case Constructed(
+          "Element",
+          List(Constant(Literal.String(tag)), rawAttrList, rawElList)) =>
+        val attributes = attributeFromValue(rawAttrList)
+        val properties = propertyFromValue(rawAttrList)
+        val bindings   = eventBindFromValue(rawAttrList, onEvent)
+
+        val children = listFromNilCons(rawElList).map(htmlFromValue(_)(onEvent))
+
+        val data = js.Dynamic.literal(
+          attrs = attributes,
+          props = properties,
+          on = bindings
+        )
+
+        snabbdom.h(tag, data, children.toJSArray)
+      case Constructed("Txt", List(Constant(Literal.String(txt)))) =>
+        txt.asInstanceOf[VNode] // TODO: what's the proper way of doing this?
+      case _ =>
+        throw new RuntimeException(s"Cannot create HTML elements from ${v}")
+    }
+  }
+
+  private def listFromNilCons(attrList: Value): List[Value] = attrList match {
+    case Constructed("Cons", List(v, vs)) => v :: listFromNilCons(vs)
+    case Constructed("Nil", _)            => Nil
+  }
+
+  private def attributeFromValue(vs: Value): js.Dictionary[String] =
+    listFromNilCons(vs)
+      .collect {
+        case Value.Constructed("Attribute",
+                               List(Value.Constant(Literal.String(name)),
+                                    Value.Constant(Literal.String(value)))) =>
+          name -> value
+      }
+      .toMap
+      .toJSDictionary
+
+  private def propertyFromValue(
+      propList: Value): js.Dictionary[String | Boolean | Int] =
+    listFromNilCons(propList)
+      .collect {
+        case Value.Constructed("Property",
+                               List(Value.Constant(Literal.String(name)),
+                                    Value.Constant(valLit))) =>
+          val value: String | Boolean | Int = valLit match {
+            case Literal.Bool(b)     => b
+            case Literal.String(str) => str
+            case Literal.Int(i)      => i
+            case _ =>
+              throw new RuntimeException(
+                s"Cannot create Property from ${valLit}")
+          }
+          name -> value
+      }
+      .toMap
+      .toJSDictionary
+
+  private def eventBindFromValue(
+      vs: Value,
+      applyEvtToClosure: (dom.Event, Value.Closure) => Unit)
+    : js.Dictionary[js.Function1[dom.Event, Unit]] =
+    listFromNilCons(vs)
+      .collect {
+        case Value.Constructed("EventBind",
+                               List(Value.Constant(Literal.String(name)),
+                                    cl @ Value.Closure(_, _))) =>
+          val callBack: js.Function1[dom.Event, Unit] = applyEvtToClosure(_, cl)
+          name -> callBack
+      }
+      .toMap
+      .toJSDictionary
+}

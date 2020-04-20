@@ -15,7 +15,34 @@ trait LibInt {
        LocAbs(List("l"),
               Abs(List(("x", '_', 'l')), Native("print", List('x')))), {
          (ls: List[Value]) =>
+           println(ls.head)
            Value.Constant(Literal.Unit)
+       }
+     )),
+    ("intToString",
+     LibData(
+       LocAbs(
+         List("l"),
+         Abs(List(("x", IntTpe, 'l')), Native("intToString", List('x')))), {
+         (vs: List[Value]) =>
+           vs match {
+             case List(Value.Constant(Literal.Int(i))) =>
+               Value.Constant(Literal.String(i.toString))
+           }
+       }
+     )),
+    ("concat",
+     LibData(
+       LocAbs(List("l"),
+              Abs(List(("x", StringTpe, 'l')),
+                  Abs(List(("y", StringTpe, 'l')),
+                      Native("concat", List('x', 'y'))))), {
+         (vs: List[Value]) =>
+           vs match {
+             case List(Value.Constant(Literal.String(x)),
+                       Value.Constant(Literal.String(y))) =>
+               Value.Constant(Literal.String(x + y))
+           }
        }
      )),
     ("not",
@@ -28,16 +55,14 @@ trait LibInt {
      LibData(
        LocAbs(
          List("l"),
-         LocAbs(List("k"),
-                TypeAbs(List("a"),
-                        Abs(List(("x", 'a', 'k')),
-                            App(
-                              Abs(List(("u", UnitTpe, 'l')),
-                                  Native("ref", List('x'))),
-                              None,
-                              Lit(Literal.Unit),
-                              Some('l')
-                            ))))
+         TypeAbs(List("a"),
+                 Abs(List(("x", 'a', 'l')),
+                     App(
+                       Abs(List(("u", UnitTpe, 'l')), Native("ref", List('x'))),
+                       None,
+                       Lit(Literal.Unit),
+                       Some('l')
+                     )))
        ), { (vs: List[Value]) =>
          vs match {
            case List(value) =>
@@ -51,18 +76,15 @@ trait LibInt {
      LibData(
        LocAbs(
          List("l"),
-         LocAbs(
-           List("k"),
-           TypeAbs(
-             List("a"),
-             Abs(List(("x", Tpe.Data("ref", List('l'), List('a')), 'k')),
-                 App(
-                   Abs(List(("u", UnitTpe, 'l')), Native("!", List('x'))),
-                   None,
-                   Lit(Literal.Unit),
-                   Some('l')
-                 ))
-           )
+         TypeAbs(
+           List("a"),
+           Abs(List(("x", Tpe.Data("Ref", List('l'), List('a')), 'l')),
+               App(
+                 Abs(List(("u", UnitTpe, 'l')), Native("!", List('x'))),
+                 None,
+                 Lit(Literal.Unit),
+                 Some('l')
+               ))
          )
        ), { (vs: List[Value]) =>
          vs match {
@@ -77,21 +99,17 @@ trait LibInt {
      LibData(
        LocAbs(
          List("l"),
-         LocAbs(
-           List("k"),
-           TypeAbs(
-             List("a"),
-             Abs(
-               List(("r", Tpe.Data("ref", List('l'), List('a')), 'k')),
-               Abs(List(("p", 'a', 'k')),
-                   App(
-                     Abs(List(("u", UnitTpe, 'l')),
-                         Native(":=", List('r', 'p'))),
-                     None,
-                     Lit(Literal.Unit),
-                     Some('l')
-                   ))
-             )
+         TypeAbs(
+           List("a"),
+           Abs(
+             List(("r", Tpe.Data("Ref", List('l'), List('a')), 'l')),
+             Abs(List(("p", 'a', 'l')),
+                 App(
+                   Abs(List(("u", UnitTpe, 'l')), Native(":=", List('r', 'p'))),
+                   None,
+                   Lit(Literal.Unit),
+                   Some('l')
+                 ))
            )
          )
        ), { (vs: List[Value]) =>

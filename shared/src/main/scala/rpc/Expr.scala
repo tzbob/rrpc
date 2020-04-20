@@ -23,9 +23,13 @@ object Expr {
     case class LocApp(expr: Expr, optTpe: Option[Tpe], locs: List[Location])
         extends Expr
 
-    case class Tup(list: List[Expr])                extends Expr
-    case class Prim(op: Operator, args: List[Expr]) extends Expr
-    case class Lit(literal: Literal)                extends Expr
+    case class Tup(list: List[Expr]) extends Expr
+    case class Prim(op: Operator,
+                    locs: List[Location],
+                    tpes: List[Tpe],
+                    args: List[Expr])
+        extends Expr
+    case class Lit(literal: Literal) extends Expr
     case class Constructor(name: String,
                            locs: List[Location],
                            tpes: List[Tpe],
@@ -61,7 +65,7 @@ object Expr {
         case Open.TypeApp(expr, _, _)            => traversed(expr)
         case Open.LocApp(expr, _, _)             => traversed(expr)
         case Open.Tup(exprs)                     => exprs.flatMap(traversed)
-        case Open.Prim(_, args)                  => args.flatMap(traversed)
+        case Open.Prim(_, _, _, args)            => args.flatMap(traversed)
         case Open.Lit(_)                         => Nil
         case Open.Constructor(_, _, _, exprs, _) => exprs.flatMap(traversed)
         case Open.Native(_, vars)                => vars.flatMap(traversed)
@@ -86,6 +90,8 @@ object Expr {
           }
           unpackTupleList(b)
         case Open.LocAbs(locs, _) => (Nil, locs.map(Location.Var), Nil)
+        case Open.Prim(_, locs, _, _) =>
+          (Nil, locs.collect { case l @ Location.Var(_) => l }, Nil)
         case Open.Case(_, _, alts) =>
           val a = alts.map { alternative =>
             val params = alternative match {
@@ -118,8 +124,12 @@ object Expr {
     case class TypeApp(expr: Expr, tpes: List[Tpe])     extends Expr
     case class LocApp(expr: Expr, locs: List[Location]) extends Expr
     case class Tup(list: List[Expr])                    extends Expr
-    case class Prim(op: Operator, args: List[Expr])     extends Expr
-    case class Lit(literal: Literal)                    extends Expr
+    case class Prim(op: Operator,
+                    locs: List[Location],
+                    tpes: List[Tpe],
+                    args: List[Expr])
+        extends Expr
+    case class Lit(literal: Literal) extends Expr
     case class Constructor(name: String,
                            locs: List[Location],
                            tpes: List[Tpe],
@@ -231,9 +241,9 @@ object Expr {
           case Open.Tup(list) =>
             val (nLs, nId, nList) = buildExprList(list)
             (nId, Closed.Tup(nList), nLs)
-          case Open.Prim(op, args) =>
+          case Open.Prim(op, locs, tpes, args) =>
             val (ls, id, nargs) = buildExprList(args)
-            (id, Closed.Prim(op, nargs), ls)
+            (id, Closed.Prim(op, locs, tpes, nargs), ls)
           case Open.Lit(literal) => (id, Closed.Lit(literal), Map.empty)
           case Open.Constructor(name, locs, tpes, exprs, _) =>
             val (ls, id, nExprs) = buildExprList(exprs)

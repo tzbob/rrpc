@@ -10,7 +10,7 @@ object RefStorage {
     storage.size - 1
   }
 
-  def read(address: Int): Value         = {
+  def read(address: Int): Value = {
     storage(address)
   }
   def write(address: Int, value: Value) = {

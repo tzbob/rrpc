@@ -154,7 +154,9 @@ object HaskellJsonDecoders {
   private implicit val exprTupD: Decoder[Tup] = (c: HCursor) =>
     c.downField("Tuple").as[List[Expr]].map(Tup)
   private implicit val exprPrimD: Decoder[Prim] = (c: HCursor) =>
-    c.downField("Prim").as[(Operator, List[Expr])].map(Prim.tupled)
+    c.downField("Prim")
+      .as[(Operator, List[Location], List[Tpe], List[Expr])]
+      .map(Prim.tupled)
   private implicit val exprLitD: Decoder[Lit] = (c: HCursor) =>
     c.downField("Lit").as[Literal].map(Lit)
   private implicit val exprDataD: Decoder[Open.Constructor] = (c: HCursor) =>

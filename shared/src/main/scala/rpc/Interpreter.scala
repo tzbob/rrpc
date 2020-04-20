@@ -3,6 +3,7 @@ package rpc
 import cats.effect.Async
 import cats.implicits._
 import io.circe.generic.JsonCodec
+import izumi.logstage.api.IzLogger
 import rpc.Declaration.TopLevel
 import rpc.Expr.Closed.{ClosedLam, LamRef, LamStore}
 import rpc.Expr.{Closed, Open}
@@ -12,6 +13,7 @@ import rpc.error.{CaseError, MissingValueError, TypeError}
 import scala.collection.mutable
 
 object Interpreter {
+  val logger = IzLogger()
   @JsonCodec case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
@@ -25,15 +27,22 @@ object Interpreter {
       requestF: CallInfo => F[Either[CallInfo, Value]],
       replyF: Value => F[Either[CallInfo, Value]])
 
-  def runDeclarations[F[_]: Async](decls: List[TopLevel[Open.Expr]],
-                                   asyncFuns: RequestReplyF[F]): F[Env] = {
+  def compileAndRunDeclarations[F[_]: Async](
+      decls: List[TopLevel[Open.Expr]],
+      asyncFuns: RequestReplyF[F]): F[Env] = {
     val (closedDecls, store) = compileDeclarations(decls)
-    closedDecls
-      .foldLeft(Async[F].pure(Env.empty)) { (accIO, dec) =>
-        accIO.flatMap { acc =>
-          Interpreter.processDeclaration(dec, acc, store, asyncFuns)
-        }
+    runDeclarations(asyncFuns, closedDecls, store, Env.empty)
+  }
+
+  def runDeclarations[F[_]: Async](asyncFuns: RequestReplyF[F],
+                                   closedDecls: List[TopLevel[Closed.Expr]],
+                                   store: LamStore,
+                                   env: Env) = {
+    closedDecls.foldLeft(Async[F].pure(env)) { (accIO, dec) =>
+      accIO.flatMap { acc =>
+        Interpreter.processDeclaration(dec, acc, store, asyncFuns)
       }
+    }
   }
 
   def compileDeclarations(decls: List[TopLevel[Open.Expr]])
@@ -62,6 +71,7 @@ object Interpreter {
       env: Env,
       store: LamStore,
       asyncFuns: RequestReplyF[F]): F[Env] = {
+    logger.trace(s"Processing $decl")
     decl match {
       case TopLevel.DataType(_) => Async[F].pure(env)
       // Tie the recursive not through a recursive environment on a closure
@@ -196,7 +206,7 @@ object Interpreter {
         interpretMultiple(exprs) { values =>
           cont(Value.Tupled(values))
         }
-      case Closed.Prim(op, args) =>
+      case Closed.Prim(op, _, _, args) =>
         interpretMultiple(args) { values =>
           val constants = values.map {
             case Value.Constant(lit) => lit
@@ -314,7 +324,8 @@ object Interpreter {
       implicit store: LamStore): Either[ExternalCall, Value] = {
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
-      case Some(Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
+      case Some(cl @ Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
+        logger.trace(s"Performing request $cl app $bound")
         Interpreter.interpretToValueOrExternalCall(
           body,
           env.toEnv.add(boundVar.name, bound),
@@ -327,6 +338,7 @@ object Interpreter {
   def handleClientResponse[F[_]: Async](
       value: Value,
       queue: mutable.Queue[Cont[Value]]): Either[ExternalCall, Value] = {
+    logger.trace(s"Continuing with $value")
     val cont = queue.dequeue()
     cont(value)
   }

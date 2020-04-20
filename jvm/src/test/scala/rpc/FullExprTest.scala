@@ -21,7 +21,7 @@ class FullExprTest extends AnyFunSuite {
         // Separate store for servers as it would be in an actual run.
         val (_, store) = Interpreter.compileDeclarations(value)
         Interpreter
-          .runDeclarations(value, TestRunner.fullRunIOFunctions(store))
+          .compileAndRunDeclarations(value, TestRunner.fullRunIOFunctions(store))
           .unsafeRunSync()
 
       case Left(error) => throw new RuntimeException(error)
@@ -126,6 +126,6 @@ class FullExprTest extends AnyFunSuite {
     import Dsl._
     import Value._
     val result = runProgram("ref")
-    assert(result.values("main") === Constant("\"four five six\""))
+    assert(result.values("main") === Constant("four five six"))
   }
 }

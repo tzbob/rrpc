@@ -47,7 +47,7 @@ trait RpcApp extends RpcAppInt {
           case req @ GET -> Root / "assets" / "client.js" =>
             // StaticFile.fromResource[IO]("test.html", blocker, Some(req)).getOrElseF(NotFound())
             StaticFile
-              .fromFile(new File("../js/target/scala-2.13/rpc-fastopt.js"),
+              .fromFile(new File("../js/target/scala-2.13/scalajs-bundler/main/rpc-opt-bundle.js"),
                         blocker,
                         Some(req))
               .getOrElseF(NotFound())

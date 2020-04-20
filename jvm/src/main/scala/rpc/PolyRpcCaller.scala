@@ -17,8 +17,10 @@ object PolyRpcCaller {
   def load(name: String, reset: Boolean = false)(implicit c: Config): String = {
     val js = new File(toJsonLocation(name))
     if (reset) js.delete()
-    if (!js.exists())
+    if (!js.exists()) {
+      println(js)
       println(generateTypedAST(name))
+    }
     readTypedAST(name)
   }
 
@@ -31,6 +33,7 @@ object PolyRpcCaller {
     val path     = s"${c.binPath}/${OsUtil.simpleOs()}"
     val bin      = s"$path/polyrpc-exe${OsUtil.binSuffix()}"
     val location = toFileLocation(name)
-    Process(s"$bin --output-json $location").lazyLines.mkString("\n")
+    os.proc(bin, "--output-json", location).call(mergeErrIntoOut = true)
+//        Process(s"$bin --output-json $location").lazyLines.mkString("\n")
   }
 }
