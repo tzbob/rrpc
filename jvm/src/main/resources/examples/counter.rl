@@ -8,18 +8,20 @@ cs : [a]. a -client-> List [a] -client-> List [a]
            lst: List [a] @ client. Cons [a] w lst;
 
 data Html = [a]. Element String (List [Attr [a]]) (List [Html [a]]) | Txt String;
-data Attr = [a]. Property String String | Attribute String String | EventBind String a | ValueBind String (String -client-> a);
+data Attr = [a]. Property String String | Attribute String String | ValueBind String (String -client-> a);
 
+// TODO: currently: re-use value bind and rely on JavaScript silent failures
 onClick : [a]. a -client-> Attr [a]
-        = [a]. \msg: a @ client. EventBind [a] "click" msg;
+        = [a]. \msg: a @ client. ValueBind [a] "click" (\str: String @ client. msg);
+
 onInput : [a]. (String -client-> a) -client-> Attr [a]
         = [a]. \msgF: (String -client-> a) @ client. ValueBind [a] "input" msgF;
 
 // Page is: init x view x update x mount point (query selector e.g., #id)
 data Page = [a e]. Page a (a -client-> Html [e]) (e -client-> a -client-> a) String;
 
-data Model = Content String String;
-data Msg = Update String;
+data Model = Model Int;
+data Msg = Increment | Decrement;
 
 nlH : List [Html [Msg]]
     = Nil [Html [Msg]];
@@ -35,23 +37,31 @@ csA : Attr [Msg] -client-> List [Attr [Msg]] -client-> List [Attr [Msg]]
 
 view : Model -client-> Html [Msg]
      = \m: Model @ client.
-          case m { Content str rev =>
+          case m { Model int =>
             Element [Msg] "div" nlA
-              (csH (Element [Msg] "input"
-                        (csA (onInput [Msg] (Update))
-                            (csA (Attribute [Msg] "type" "text")
-                                (csA (Attribute [Msg] "value" str) nlA)))
-                         nlH)
-                  (csH (Element [Msg] "div" nlA (csH (Txt [Msg] rev) nlH)) nlH))
-          };
+              (csH (Element [Msg] "button"
+                        (csA (onClick [Msg] Increment) nlA)
+                         (csH (Txt [Msg] "+1") nlH))
+              (csH (Element [Msg] "button"
+                        (csA (onClick [Msg] Decrement) nlA)
+                         (csH (Txt [Msg] "-1") nlH))
+              (csH (Element [Msg] "div" nlA (csH (Txt [Msg] (intToString {client} int)) nlH))
 
+              nlH)))
+          };
 
 update : Msg -client-> Model -client-> Model
        = \msg: Msg @ client model: Model @ client.
-            case msg { Update str => Content str (concat {server} (concat {server} str " ") str) };
+            case model {
+              Model int =>
+                case msg {
+                  Increment => Model (int + 1);
+                  Decrement => Model (int - 1)
+                }
+            };
 
 init : Model
-     = Content "" "";
+     = Model 0;
 
 main : Page [Model Msg]
      = Page [Model Msg] init view update "#body"

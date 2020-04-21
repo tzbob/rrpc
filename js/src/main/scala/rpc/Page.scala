@@ -29,7 +29,7 @@ object Page {
           List(Constant(Literal.String(tag)), rawAttrList, rawElList)) =>
         val attributes = attributeFromValue(rawAttrList)
         val properties = propertyFromValue(rawAttrList)
-        val bindings   = eventBindFromValue(rawAttrList, onEvent)
+        val bindings   = valueBindFromValue(rawAttrList, onEvent)
 
         val children = listFromNilCons(rawElList).map(htmlFromValue(_)(onEvent))
 
@@ -83,13 +83,13 @@ object Page {
       .toMap
       .toJSDictionary
 
-  private def eventBindFromValue(
+  private def valueBindFromValue(
       vs: Value,
       applyEvtToClosure: (dom.Event, Value.Closure) => Unit)
     : js.Dictionary[js.Function1[dom.Event, Unit]] =
     listFromNilCons(vs)
       .collect {
-        case Value.Constructed("EventBind",
+        case Value.Constructed("ValueBind",
                                List(Value.Constant(Literal.String(name)),
                                     cl @ Value.Closure(_, _))) =>
           val callBack: js.Function1[dom.Event, Unit] = applyEvtToClosure(_, cl)
