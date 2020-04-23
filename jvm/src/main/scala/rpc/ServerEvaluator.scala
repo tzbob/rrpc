@@ -15,13 +15,12 @@ import scala.collection.mutable
 
 object ServerEvaluator {
 
-  def buildRoutes(program: String, store: LamStore)(
+  def buildRoutes(program: AppData, store: LamStore)(
       implicit shift: ContextShift[IO]): HttpRoutes[IO] = {
 
     implicit val decoder   = jsonOf[IO, Identified[CallInfo]]
     implicit val vdencoder = jsonOf[IO, Identified[Value]]
 
-    // TODO, use IOREF or another proper construct
     val sessionQueues = mutable.HashMap.empty[UUID, mutable.Queue[Cont[Value]]]
     def getOrAddQueue(id: UUID) =
       sessionQueues.getOrElseUpdate(id, mutable.Queue.empty)
@@ -41,11 +40,11 @@ object ServerEvaluator {
             s"""<!DOCTYPE html><head>
                 <meta charset='UTF-8'>
                 <script src='/assets/client.js'></script>
+                ${program.headContent}
                 </head>
-                <body><div id=body><code>$program</code>
-                <h2>Evaluated to:</h2>
-                <h1 id='result'>Calculating...</h1>
-                </div></body>
+                <body>
+                  ${program.bodyContent}
+                </body>
                 </html>
             """,
             `Content-Type`(MediaType.text.html)
@@ -59,7 +58,7 @@ object ServerEvaluator {
               Interpreter.performServerRequest(idCallInfo.value)(store))
           } yield resp
 
-        case req @ GET -> Root / "load" => Ok(program)
+        case GET -> Root / "load" => Ok(program.raw)
 
         case req @ POST -> Root / "continue" =>
           for {

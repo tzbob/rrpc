@@ -12,7 +12,7 @@ import scala.scalajs.js.|
 case class Page(init: Value, view: Value, update: Value, mountPoint: String)
 
 object Page {
-  private val logger = IzLogger()
+  IzLogger()
 
   def pageFromValue(v: Value): Option[Page] = v match {
     case Constructed("Page",

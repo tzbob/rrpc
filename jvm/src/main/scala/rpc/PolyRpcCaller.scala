@@ -3,7 +3,6 @@ package rpc
 import java.io.File
 
 import scala.io.Source
-import scala.sys.process.Process
 
 object PolyRpcCaller {
   case class Config(path: String, extension: String, binPath: String)
@@ -34,6 +33,5 @@ object PolyRpcCaller {
     val bin      = s"$path/polyrpc-exe${OsUtil.binSuffix()}"
     val location = toFileLocation(name)
     os.proc(bin, "--output-json", location).call(mergeErrIntoOut = true)
-//        Process(s"$bin --output-json $location").lazyLines.mkString("\n")
   }
 }

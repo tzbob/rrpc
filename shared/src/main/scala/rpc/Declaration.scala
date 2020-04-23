@@ -22,6 +22,14 @@ object Declaration {
       val (newExpr, store) = Closed.compileForInterpreter(b.b.expr, lamStore)
       Binding(Declaration.Binding(b.b.name, b.b.tpe, newExpr)) -> store
     }
+
+    def isPage(topLevels: List[TopLevel[Open.Expr]]) =
+      topLevels.lastOption match {
+        case Some(
+            Binding(Declaration.Binding("main", Tpe.Data("Page", _, _), _))) =>
+          true
+        case _ => false
+      }
   }
 
   case class Constructor(name: String, tpes: List[Tpe])

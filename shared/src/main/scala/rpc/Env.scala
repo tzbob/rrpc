@@ -1,10 +1,6 @@
 package rpc
 
-import io.circe.{Encoder, Json}
 import io.circe.generic.JsonCodec
-import io.circe.syntax._
-import io.circe._
-import io.circe.parser.decode
 
 import rpc.Expr.Closed
 
