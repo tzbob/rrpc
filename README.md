@@ -33,7 +33,7 @@ To run an example go to http://localhost:8080/<example-name>, e.g., for ```arrow
 To modify an example make your modifications to the ```<example>.rl``` file and **DELETE** the ```<example>.json``` file.
 (If you're not running in ```~reStart``` mode then ```reStart``` manually.)
 
-## Structure of the report
+## Structure of the repository
 
 ```
 ├── js
