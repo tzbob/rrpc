@@ -65,3 +65,5 @@ lazy val rpcJS = rpc.js
     )
   )
   .enablePlugins(ScalaJSPlugin, ScalaJSBundlerPlugin)
+
+onLoad in Global ~= (_ andThen ("project rpcJVM" :: _))
