@@ -51,11 +51,11 @@ We currently have the following examples:
 - http://localhost:8080/stream
 - http://localhost:8080/tup
 
-We especially urge the reader to look at the chat example since this showcases a typical PolyRPC application.
-
-
 To modify an example make your modifications to the ```<example>.rl``` file and **DELETE** the ```<example>.json``` file.
 (If you're not running in ```~reStart``` mode then ```reStart``` manually.)
+
+The examples are written in two styles: (1) a simple evaluator that shows the value of main, or (2) an interactive page with an [Elm](https://elm-lang.org/) style HTML API.
+
 
 ## Structure of the repository
 
