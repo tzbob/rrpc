@@ -158,6 +158,8 @@ object Interpreter {
       localLoc: Location.Loc)(cont: Cont[Value])(
       implicit store: LamStore): Either[ExternalCall, Value] = {
 
+    logger.trace(s"Intepreting $term")
+
     def interpretMultiple(results: List[Closed.Expr])(
         cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
       def helper(values: List[Value], results: List[Closed.Expr])(
@@ -289,6 +291,22 @@ object Interpreter {
 
         val minimal = Env.minimize(env, freeTpes, freeLocs, freeVars)
         cont(Closure(lr, minimal))
+
+        // FIXME: describe limitations (e.g. only works with 1 program conflicting ids)
+        // FIXME: INTERNAL SERVER ERROR 500 WHEN THIS IS HIT
+      case Closed.Thunk(id, fun) =>
+        logger.info(s"thunked $term")
+        ThunkStorage.read(id) match {
+          case Some(v) => cont(v)
+          case None =>
+            interpretToValueOrExternalCall(
+              fun,//FIXME: why was this wrong? Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
+              env,
+              localLoc) { result =>
+              ThunkStorage.write(id, result)
+              cont(result)
+            }
+        }
       case Closed.App(fun, param, Some(locV)) =>
         interpretToValueOrExternalCall(fun, env, localLoc) {
           case c @ Closure(lr, closedEnv) =>
@@ -324,7 +342,8 @@ object Interpreter {
       implicit store: LamStore): Either[ExternalCall, Value] = {
     val CallInfo(lr, bound, env) = callInfo
     store.get(lr) match {
-      case Some(cl @ Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
+      case Some(
+          cl @ Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
         logger.trace(s"Performing request $cl app $bound")
         Interpreter.interpretToValueOrExternalCall(
           body,

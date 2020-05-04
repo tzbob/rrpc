@@ -10,8 +10,6 @@ cs : [a]. a -client-> List [a] -client-> List [a]
 data Html = [a]. Element String (List [Attr [a]]) (List [Html [a]]) | Txt String;
 data Attr = [a]. Property String String | Attribute String String | EventBind String a | ValueBind String (String -client-> a);
 
-onClick : [a]. a -client-> Attr [a]
-        = [a]. \msg: a @ client. EventBind [a] "click" msg;
 onInput : [a]. (String -client-> a) -client-> Attr [a]
         = [a]. \msgF: (String -client-> a) @ client. ValueBind [a] "input" msgF;
 

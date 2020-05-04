@@ -1,3 +1,6 @@
+thunk : [a]. (Unit -server-> a) -server-> a
+      = [a]. \f: Unit -server-> a @ server. f ();
+
 data List = [a]. Nil | Cons a (List [a]) ;
 
 nl : [a]. List [a]
@@ -50,6 +53,9 @@ view : Model -client-> Html [Msg]
               nlH)))
           };
 
+serverModel : Ref {server} [Int]
+            = thunk [Ref {server} [Int]] (\u: Unit @ server. ref {server} [Int] 0);
+
 update : Msg -client-> Model -client-> Model
        = \msg: Msg @ client model: Model @ client.
             case model {
@@ -61,7 +67,7 @@ update : Msg -client-> Model -client-> Model
             };
 
 init : Model
-     = Model (ref {server} [Int] 0);
+     = Model serverModel;
 
 main : Page [Model Msg]
      = Page [Model Msg] init view update "#body"

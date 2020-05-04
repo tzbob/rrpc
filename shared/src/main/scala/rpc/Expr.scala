@@ -2,7 +2,9 @@ package rpc
 
 import io.circe.generic.JsonCodec
 import io.circe.{KeyDecoder, KeyEncoder}
+import izumi.logstage.api.IzLogger
 object Expr {
+  val logger = IzLogger()
 
   object Open {
     sealed trait Expr
@@ -44,6 +46,8 @@ object Expr {
 
     // Added for native libs
     case class Native(name: String, vars: List[Var]) extends Expr
+    // Added for server thunks
+    case class Thunk(app: App) extends Expr
 
     def traversed(expr: Open.Expr): List[Open.Expr] = {
       expr :: (expr match {
@@ -69,6 +73,7 @@ object Expr {
         case Open.Lit(_)                         => Nil
         case Open.Constructor(_, _, _, exprs, _) => exprs.flatMap(traversed)
         case Open.Native(_, vars)                => vars.flatMap(traversed)
+        case Open.Thunk(expr)                    => traversed(expr)
         case Abs(List((_, _, _)), expr)          => traversed(expr)
       })
     }
@@ -141,6 +146,7 @@ object Expr {
         extends Expr
     case class Native(name: String, vars: List[Var]) extends Expr
     @JsonCodec case class LamRef(id: Int)            extends Expr
+    case class Thunk(id: Int, expr: Expr)            extends Expr
     case class ClosedLam(id: Int,
                          body: Closed.Expr,
                          boundVars: List[Closed.Var],
@@ -202,6 +208,31 @@ object Expr {
         }
 
         typedTerm match {
+          case Open.Thunk(app) =>
+            val id = ThunkStorage.init()
+            val (fId, fC, fStore) = helper(id, app)
+            (fId, Closed.Thunk(id, fC), fStore)
+
+          case Open.App(Open.TypeApp(Open.Var("thunk"), _, _),
+                        _,
+                        param,
+                        Some(Location.server)) =>
+            helper(
+              id,
+              Open.App(
+                Open.Abs(List(("x", Dsl.UnitTpe, Location.server)),
+                         Open.Thunk(
+                           Open.App(param,
+                                    None,
+                                    Open.Lit(Literal.Unit),
+                                    Some(Location.server))
+                         )),
+                Some(Dsl.UnitTpe),
+                Open.Lit(Literal.Unit),
+                Some(Location.server)
+              )
+            )
+
           case Open.App(fun, _, param, l) =>
             val (fId, fC, fStore) = helper(id, fun)
             val (pId, pC, pStore) = helper(fId, param)
@@ -265,5 +296,6 @@ object Expr {
       val (_, term, store) = helper(startId, typedTerm)
       (term, startStore ++ store)
     }
+
   }
 }
