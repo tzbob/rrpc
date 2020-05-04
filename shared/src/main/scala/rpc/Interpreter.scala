@@ -292,15 +292,15 @@ object Interpreter {
         val minimal = Env.minimize(env, freeTpes, freeLocs, freeVars)
         cont(Closure(lr, minimal))
 
-        // FIXME: describe limitations (e.g. only works with 1 program conflicting ids)
-        // FIXME: INTERNAL SERVER ERROR 500 WHEN THIS IS HIT
+      // FIXME: describe limitations (e.g. only works with 1 program conflicting ids)
       case Closed.Thunk(id, fun) =>
         logger.info(s"thunked $term")
         ThunkStorage.read(id) match {
           case Some(v) => cont(v)
           case None =>
             interpretToValueOrExternalCall(
-              fun,//FIXME: why was this wrong? Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
+              fun,// Note: first Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
+                  // not required since thunk is always a unit function,
               env,
               localLoc) { result =>
               ThunkStorage.write(id, result)

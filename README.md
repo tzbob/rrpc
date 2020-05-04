@@ -6,7 +6,7 @@ To get started with the PolyRPC runtime you need the [scala build tool](https://
 Given an appropriate build file, SBT will pull down all required libraries and the appropriate Scala version.
 NPM is required since there are some client-side libraries that are used by Scala.js dependencies of the runtime.
 
-> **Important:** without `npm` or `sbt` none of the following steps will work.
+> # **Important:** without `npm` or `sbt` none of the following steps will work.
 
 ### Get the source code 
 
@@ -28,7 +28,31 @@ The ```~``` option watches the sources for any changes and recompiles and restar
 All examples are in ```jvm/src/main/resources/examples```, for now this is a fixed path.
 Any new examples have to be written in this directory and have to end with the ```.rl``` extension.
 
-To run an example go to http://localhost:8080/<example-name>, e.g., for ```arrow.rl```: http://localhost:8080/arrow (note the absence of ```.rl```).
+To run an example go to http://localhost:8080/<example-name>, e.g., chat.rl can be found on http://localhost:8080/chat/
+
+We currently have the following examples:
+
+- http://localhost:8080/chat
+- http://localhost:8080/arrow
+- http://localhost:8080/constructor
+- http://localhost:8080/counter
+- http://localhost:8080/count
+- http://localhost:8080/cross
+- http://localhost:8080/getorelse
+- http://localhost:8080/head
+- http://localhost:8080/hellolet
+- http://localhost:8080/helloworld
+- http://localhost:8080/map
+- http://localhost:8080/missingcase
+- http://localhost:8080/operators
+- http://localhost:8080/ref
+- http://localhost:8080/reversehtml
+- http://localhost:8080/servercounter_tupled
+- http://localhost:8080/stream
+- http://localhost:8080/tup
+
+We especially urge the reader to look at the chat example since this showcases a typical PolyRPC application.
+
 
 To modify an example make your modifications to the ```<example>.rl``` file and **DELETE** the ```<example>.json``` file.
 (If you're not running in ```~reStart``` mode then ```reStart``` manually.)
