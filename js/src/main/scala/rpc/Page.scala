@@ -11,9 +11,14 @@ import scala.scalajs.js.|
 
 case class Page(init: Value, view: Value, update: Value, mountPoint: String)
 
-object Page {
-  IzLogger()
+trait Binding
+object Binding {
+  case class TargetValue(closure: Value.Closure) extends Binding
+  case class EmptyValue(msg: Value)              extends Binding
+  case class KeyPress(key: Int, msg: Value)      extends Binding
+}
 
+object Page {
   def pageFromValue(v: Value): Option[Page] = v match {
     case Constructed("Page",
                      List(init, update, view, Constant(Literal.String(mnt)))) =>
@@ -21,8 +26,7 @@ object Page {
     case _ => None
   }
 
-  def htmlFromValue(v: Value)(
-      onEvent: (dom.Event, Value.Closure) => Unit): VNode = {
+  def htmlFromValue(v: Value)(onEvent: (dom.Event, Binding) => Unit): VNode = {
     v match {
       case Constructed(
           "Element",
@@ -31,7 +35,8 @@ object Page {
         val properties = propertyFromValue(rawAttrList)
         val bindings   = valueBindFromValue(rawAttrList, onEvent)
 
-        val children = listFromNilCons(rawElList).map(htmlFromValue(_)(onEvent))
+        val children =
+          listFromNilCons(rawElList).map(htmlFromValue(_)(onEvent))
 
         val data = js.Dynamic.literal(
           attrs = attributes,
@@ -85,15 +90,27 @@ object Page {
 
   private def valueBindFromValue(
       vs: Value,
-      applyEvtToClosure: (dom.Event, Value.Closure) => Unit)
+      applyEvtToClosure: (dom.Event, Binding) => Unit)
     : js.Dictionary[js.Function1[dom.Event, Unit]] =
     listFromNilCons(vs)
       .collect {
         case Value.Constructed("ValueBind",
                                List(Value.Constant(Literal.String(name)),
                                     cl @ Value.Closure(_, _))) =>
-          val callBack: js.Function1[dom.Event, Unit] = applyEvtToClosure(_, cl)
+          val callBack: js.Function1[dom.Event, Unit] =
+            applyEvtToClosure(_, Binding.TargetValue(cl))
           name -> callBack
+        case Value.Constructed("EventBind",
+                               List(Value.Constant(Literal.String(name)), v)) =>
+          val callBack: js.Function1[dom.Event, Unit] =
+            applyEvtToClosure(_, Binding.EmptyValue(v))
+          name -> callBack
+        case Value.Constructed(
+            "KeyBind",
+            List(Value.Constant(Literal.Int(keyCode)), msg)) =>
+          val callBack: js.Function1[dom.Event, Unit] =
+            applyEvtToClosure(_, Binding.KeyPress(keyCode, msg))
+          "keyup" -> callBack
       }
       .toMap
       .toJSDictionary

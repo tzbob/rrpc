@@ -9,6 +9,8 @@ import org.http4s.dsl.io._
 import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze._
+import org.http4s.server.staticcontent
+import org.http4s.server.staticcontent._
 import org.http4s.{HttpRoutes, StaticFile}
 import rpc.Declaration.TopLevel
 import rpc.Expr.Open
@@ -81,7 +83,9 @@ trait RpcApp extends RpcAppInt {
           .bindHttp(port, hostname)
           .withHttpApp(
             Router(
-              (assertMapping(blocker) :: routerMapping): _*
+              (("/r" -> resourceService[IO](ResourceService.Config(
+                "/",
+                blocker))) :: assertMapping(blocker) :: routerMapping): _*
             ).orNotFound)
           .resource
       } yield server

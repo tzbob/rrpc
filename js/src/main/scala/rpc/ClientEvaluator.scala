@@ -16,8 +16,7 @@ import rpc.Interpreter.{CallInfo, RequestReplyF}
 import snabbdom.VNode
 
 object ClientEvaluator {
-  private val logger = IzLogger()
-
+  private val logger     = Log.logger
   private val identifier = UUID.randomUUID()
 
   private def caller[A: Encoder](uri: String)(a: A)(
@@ -87,16 +86,30 @@ object ClientEvaluator {
               initViewOpt match {
                 case None => throw new RuntimeException("No initial view value")
                 case Some(value) =>
-                  Page.htmlFromValue(value) { (evt, closure) =>
-                    logger.info("Event handler triggered")
-                    val optValueIO = applyValueToClosure(
-                      requestReplyF,
-                      store,
-                      closure,
-                      List(
-                        Value.Constant(Literal.String(
-                          evt.target.asInstanceOf[HTMLInputElement].value))),
-                      env)
+                  Page.htmlFromValue(value) { (evt, binding) =>
+                    logger.info(s"Event handler triggered: $binding")
+
+                    val optValueIO =
+                      binding match {
+                        case Binding.TargetValue(closure) =>
+                          applyValueToClosure(
+                            requestReplyF,
+                            store,
+                            closure,
+                            List(
+                              Value.Constant(
+                                Literal.String(evt.target
+                                  .asInstanceOf[HTMLInputElement]
+                                  .value))),
+                            env)
+                        case Binding.KeyPress(key, msg) =>
+                          if (evt
+                                .asInstanceOf[dom.KeyboardEvent]
+                                .keyCode == key) IO.pure(Some(msg))
+                          else IO.pure(None)
+                        case Binding.EmptyValue(msg) =>
+                          IO.pure(Some(msg))
+                      }
 
                     val optModelIO = optValueIO.flatMap {
                       case Some(msgValue) =>
@@ -106,8 +119,7 @@ object ClientEvaluator {
                                             page.update,
                                             List(msgValue, currentModel),
                                             env)
-                      case None =>
-                        throw new RuntimeException(s"Can't exec $closure")
+                      case None => IO.pure(None)
                     }
 
                     val handlerIO = optModelIO.flatMap {
@@ -123,10 +135,7 @@ object ClientEvaluator {
                         val vnodeIO =
                           optHtmlValueIO.map(vNodeFromValueOpt(_, patcher))
                         vnodeIO.map(patcher.applyNewState)
-
-                      case None =>
-                        throw new RuntimeException(
-                          s"No model computed from $closure")
+                      case None => IO.pure(None)
                     }
                     handlerIO
                       .unsafeRunAsyncAndForget() // execute IO in the handler

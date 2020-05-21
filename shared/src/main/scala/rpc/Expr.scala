@@ -4,8 +4,6 @@ import io.circe.generic.JsonCodec
 import io.circe.{KeyDecoder, KeyEncoder}
 import izumi.logstage.api.IzLogger
 object Expr {
-  val logger = IzLogger()
-
   object Open {
     sealed trait Expr
 

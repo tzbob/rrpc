@@ -10,10 +10,11 @@ import rpc.Expr.{Closed, Open}
 import rpc.Value._
 import rpc.error.{CaseError, MissingValueError, TypeError}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 object Interpreter {
-  val logger = IzLogger()
+  val logger = Log.logger
   @JsonCodec case class CallInfo(lamRef: LamRef, bound: Value, env: Env.Minimal)
   case class ExternalCall(callInfo: CallInfo, cont: Cont[Value])
 
@@ -71,7 +72,7 @@ object Interpreter {
       env: Env,
       store: LamStore,
       asyncFuns: RequestReplyF[F]): F[Env] = {
-    logger.trace(s"Processing $decl")
+    logger.debug(s"Processing $decl")
     decl match {
       case TopLevel.DataType(_) => Async[F].pure(env)
       // Tie the recursive not through a recursive environment on a closure
@@ -292,15 +293,14 @@ object Interpreter {
         val minimal = Env.minimize(env, freeTpes, freeLocs, freeVars)
         cont(Closure(lr, minimal))
 
-      // FIXME: describe limitations (e.g. only works with 1 program conflicting ids)
       case Closed.Thunk(id, fun) =>
-        logger.info(s"thunked $term")
+        logger.debug(s"thunked $term")
         ThunkStorage.read(id) match {
           case Some(v) => cont(v)
           case None =>
             interpretToValueOrExternalCall(
               fun,// Note: first Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
-                  // not required since thunk is always a unit function,
+                  // not required since the thunked function is always a unit function,
               env,
               localLoc) { result =>
               ThunkStorage.write(id, result)
@@ -344,7 +344,7 @@ object Interpreter {
     store.get(lr) match {
       case Some(
           cl @ Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
-        logger.trace(s"Performing request $cl app $bound")
+        logger.debug(s"Performing request $cl app $bound")
         Interpreter.interpretToValueOrExternalCall(
           body,
           env.toEnv.add(boundVar.name, bound),
@@ -357,7 +357,7 @@ object Interpreter {
   def handleClientResponse[F[_]: Async](
       value: Value,
       queue: mutable.Queue[Cont[Value]]): Either[ExternalCall, Value] = {
-    logger.trace(s"Continuing with $value")
+    logger.debug(s"Continuing with $value")
     val cont = queue.dequeue()
     cont(value)
   }

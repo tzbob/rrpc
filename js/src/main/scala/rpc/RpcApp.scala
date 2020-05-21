@@ -9,8 +9,6 @@ import rpc.Declaration.TopLevel
 import rpc.Expr.Open
 
 trait RpcApp extends RpcAppInt {
-  private val logger = IzLogger()
-
   override def run(args: List[String]): IO[ExitCode] = {
     val pathName = document.location.pathname.split("/")
     val appName  = pathName.last
@@ -29,14 +27,14 @@ trait RpcApp extends RpcAppInt {
 
     ioTopLevel.flatMap { top =>
       if (TopLevel.isPage(top)) {
-        logger.info(s"Starting page mode")
+        Log.logger.info(s"Starting page mode")
         ioTopLevel
           .flatMap(
             ClientEvaluator
               .buildPageRun(_, s"http://$hostname:$port", appName))
           .map(_ => ExitCode.Success)
       } else {
-        logger.info(s"Starting value mode")
+        Log.logger.info(s"Starting value mode")
         val env = ioTopLevel.flatMap(
           ClientEvaluator.buildClientRun(_, s"http://$hostname:$port", appName))
 
