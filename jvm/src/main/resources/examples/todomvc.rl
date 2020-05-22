@@ -62,6 +62,8 @@ data Attr = [a]. Property String String | Attribute String String | EventBind St
 
 onClick : [a]. a -client-> Attr [a]
         = [a]. \msg: a @ client. EventBind [a] "click" msg;
+onDblClick : [a]. a -client-> Attr [a]
+        = [a]. \msg: a @ client. EventBind [a] "dblclick" msg;
 onEnter : [a]. a -client-> Attr [a]
         = [a]. \msg: a @ client. KeyBind [a] 13 msg;
 onInput : [a]. (String -client-> a) -client-> Attr [a]
@@ -106,9 +108,11 @@ showItem: TodoItem -client-> Int -client-> Html [Msg]
                 (csH (Element [Msg] "input" (csA (Attribute [Msg] "class" "toggle")
                                             (csA (Attribute [Msg] "type" "checkbox")
                                             (csA (onClick [Msg] (Toggle idx))
-                                            (if done then (csA (Property [Msg] "checked" "checked") nlA) else nlA))))
+                                            (if done then (csA (Attribute [Msg] "checked" "checked") nlA) else nlA))))
                                             nlH)
-                (csH (Element [Msg] "label" nlA (csH (Txt [Msg] content) nlH))
+                (csH (Element [Msg] "label"
+                  (csA (onDblClick [Msg] (Editing idx)) nlA)
+                  (csH (Txt [Msg] content) nlH))
                 (csH (Element [Msg] "button" (csA (Attribute [Msg] "class" "destroy")
                                              (csA (onClick [Msg] (Delete idx))
                                              nlA)) nlH)
@@ -178,9 +182,9 @@ view : Model -client-> Html [Msg]
           };
 
 isNotDone : TodoItem -client-> Bool
-     = \ti : TodoItem @ client. case ti { TodoItem txt done e => done };
-isDone : TodoItem -client-> Bool
      = \ti : TodoItem @ client. case ti { TodoItem txt done e => if done then False else True };
+isDone : TodoItem -client-> Bool
+     = \ti : TodoItem @ client. case ti { TodoItem txt done e => done };
 
 update : Msg -client-> Model -client-> Model
        = \msg: Msg @ client model: Model @ client.
@@ -218,13 +222,18 @@ update : Msg -client-> Model -client-> Model
 
               Select selected =>
                 case selected {
-                  All => Content line visibleList ref;
-                  Active => Content line (filter {client} [TodoItem] isNotDone visibleList) ref;
-                  Completed => Content line (filter {client} [TodoItem] isDone visibleList) ref
+                  All => Content line (! {server} [List [TodoItem]] ref) ref;
+                  Active => Content line (filter {client} [TodoItem] isNotDone (! {server} [List [TodoItem]] ref)) ref;
+                  Completed => Content line (filter {client} [TodoItem] isDone (! {server} [List [TodoItem]] ref)) ref
                 }
-              // FIXME Add All / Active / Completed tab
+
+//             Editing idx =>
+//               case (((\x: Unit @ server.
+//                 ref := {server} [List [TodoItem]]
+//                   (mapOnIndex {server server} [TodoItem] idx (???) visibleList)
+//               ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
+
               // FIXME Add Double click on index
-              // FIXME Weird recursion error
           }};
 
 

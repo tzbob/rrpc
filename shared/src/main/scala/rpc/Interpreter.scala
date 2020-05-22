@@ -1,5 +1,6 @@
 package rpc
 
+import cats.Eval
 import cats.effect.Async
 import cats.implicits._
 import io.circe.generic.JsonCodec
@@ -22,7 +23,7 @@ object Interpreter {
     * Interpreter continuation of a type A to either an external call or a value.
     * @tparam A
     */
-  type Cont[A] = A => Either[ExternalCall, Value]
+  type Cont[A] = A => Eval[Either[ExternalCall, Value]]
 
   case class RequestReplyF[F[_]: Async](
       requestF: CallInfo => F[Either[CallInfo, Value]],
@@ -113,7 +114,7 @@ object Interpreter {
           def interpretResponseF(
               responseF: F[Either[CallInfo, Value]]): F[Value] = {
             val continueValue: Value => F[Value] =
-              interpretRequestOrValue _ compose cont
+              interpretRequestOrValue _ compose (v => cont(v).value)
 
             val continueCall: CallInfo => F[Value] = {
               case CallInfo(lr, bound, minCallEnv) => {
@@ -147,7 +148,8 @@ object Interpreter {
     // interpret the starting expression on the client location to retrieve either
     //   a value or a call to a different tier
     val valueOrExternalCall: Either[ExternalCall, Value] =
-      interpretToValueOrExternalCall(expr, env, Location.client)(x => Right(x))
+      interpretToValueOrExternalCall(expr, env, Location.client)(x =>
+        Eval.later(Right(x))).value
 
     // interpret the external call or continue interpreting the value
     interpretRequestOrValue(valueOrExternalCall)
@@ -157,14 +159,14 @@ object Interpreter {
       term: Closed.Expr,
       env: Env,
       localLoc: Location.Loc)(cont: Cont[Value])(
-      implicit store: LamStore): Either[ExternalCall, Value] = {
+      implicit store: LamStore): Eval[Either[ExternalCall, Value]] = {
 
     logger.trace(s"Intepreting $term")
 
     def interpretMultiple(results: List[Closed.Expr])(
-        cont: Cont[List[Value]]): Either[ExternalCall, Value] = {
+        cont: Cont[List[Value]]): Eval[Either[ExternalCall, Value]] = {
       def helper(values: List[Value], results: List[Closed.Expr])(
-          cont: Cont[List[Value]]): Either[ExternalCall, Value] =
+          cont: Cont[List[Value]]): Eval[Either[ExternalCall, Value]] =
         results match {
           case Nil => cont(values.reverse)
           case e :: es =>
@@ -175,7 +177,7 @@ object Interpreter {
       helper(Nil, results)(cont)
     }
 
-    term match {
+    Eval.always(term) flatMap {
       case Closed.Native(name, vars) =>
         interpretMultiple(vars) { vals =>
           cont {
@@ -183,14 +185,16 @@ object Interpreter {
           }
         }
       case Closed.TypeApp(expr, List(tpe)) =>
-        interpretToValueOrExternalCall(expr, env, localLoc) {
-          case Closure(lr, closedEnv) =>
-            val ClosedLam(_, body, _, List(tvar), _, _, _, _) = store(lr)
+        interpretToValueOrExternalCall(expr, env, localLoc) { cl =>
+          cl match {
+            case Closure(lr, closedEnv) =>
+              val ClosedLam(_, body, _, List(tvar), _, _, _, _) = store(lr)
 
-            val recursiveEnv = Env.applyRecursiveNames(env, closedEnv)
-            val tEnv         = recursiveEnv.toEnv.add(tvar.str, tpe)
-            interpretToValueOrExternalCall(body, tEnv, localLoc)(cont)
-          case e => throw TypeError(e, "Type Abstraction")
+              val recursiveEnv = Env.applyRecursiveNames(env, closedEnv)
+              val tEnv         = recursiveEnv.toEnv.add(tvar.str, tpe)
+              interpretToValueOrExternalCall(body, tEnv, localLoc)(cont)
+            case e => throw TypeError(e, "Type Abstraction")
+          }
         }
       case Closed.LocApp(expr, List(locV)) =>
         interpretToValueOrExternalCall(expr, env, localLoc) {
@@ -299,10 +303,11 @@ object Interpreter {
           case Some(v) => cont(v)
           case None =>
             interpretToValueOrExternalCall(
-              fun,// Note: first Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
-                  // not required since the thunked function is always a unit function,
+              fun, // Note: first Closed.App(, Closed.Lit(Literal.Unit), Some(Location.server)),
+              // not required since the thunked function is always a unit function,
               env,
-              localLoc) { result =>
+              localLoc
+            ) { result =>
               ThunkStorage.write(id, result)
               cont(result)
             }
@@ -326,11 +331,13 @@ object Interpreter {
                   recursiveEnv.toEnv.add(bound.name, value),
                   localLoc)(cont)
               } else {
-                Left(
-                  ExternalCall(
-                    CallInfo(lr, value, recursiveEnv.add(bound.name, value)),
-                    cont
-                  ))
+                Eval.now(
+                  Left(
+                    ExternalCall(
+                      CallInfo(lr, value, recursiveEnv.add(bound.name, value)),
+                      cont
+                    ))
+                )
               }
             }
           case e => throw TypeError(e, "Function")
@@ -345,10 +352,12 @@ object Interpreter {
       case Some(
           cl @ Closed.ClosedLam(_, body, List(boundVar), _, _, _, _, _)) =>
         logger.debug(s"Performing request $cl app $bound")
-        Interpreter.interpretToValueOrExternalCall(
-          body,
-          env.toEnv.add(boundVar.name, bound),
-          Location.server)(Right.apply)
+        Interpreter
+          .interpretToValueOrExternalCall(body,
+                                          env.toEnv.add(boundVar.name, bound),
+                                          Location.server)(x =>
+            Eval.later(Right.apply(x)))
+          .value
       case None =>
         throw new RuntimeException(s"No $lr in store $store")
     }
@@ -359,6 +368,6 @@ object Interpreter {
       queue: mutable.Queue[Cont[Value]]): Either[ExternalCall, Value] = {
     logger.debug(s"Continuing with $value")
     val cont = queue.dequeue()
-    cont(value)
+    cont(value).value
   }
 }
