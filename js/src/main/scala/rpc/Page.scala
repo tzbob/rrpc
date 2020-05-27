@@ -77,6 +77,8 @@ object Page {
                                     Value.Constant(valLit))) =>
           val value: String | Boolean | Int = valLit match {
             case Literal.Bool(b)     => b
+            case Literal.String("true") => true
+            case Literal.String("false") => false
             case Literal.String(str) => str
             case Literal.Int(i)      => i
             case _ =>

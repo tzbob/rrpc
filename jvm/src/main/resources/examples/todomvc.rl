@@ -64,22 +64,12 @@ onClick : [a]. a -client-> Attr [a]
         = [a]. \msg: a @ client. EventBind [a] "click" msg;
 onDblClick : [a]. a -client-> Attr [a]
         = [a]. \msg: a @ client. EventBind [a] "dblclick" msg;
+onBlur : [a]. a -client-> Attr [a]
+        = [a]. \msg: a @ client. EventBind [a] "blur" msg;
 onEnter : [a]. a -client-> Attr [a]
         = [a]. \msg: a @ client. KeyBind [a] 13 msg;
 onInput : [a]. (String -client-> a) -client-> Attr [a]
         = [a]. \msgF: (String -client-> a) @ client. ValueBind [a] "input" msgF;
-
-
-// Page is: init x view x update x mount point (query selector e.g., #id)
-data Page = [a e]. Page a (a -client-> Html [e]) (e -client-> a -client-> a) String;
-
-data TodoItem = TodoItem String Bool Bool;
-data Model = Content String (List [TodoItem]) (Ref {server} [List [TodoItem]]);
-data Selected = All | Active | Completed;
-data Msg = Update String | Submit
-         | Toggle Int | Delete Int | Editing Int | Commit Int
-         | ClearCompleted
-         | Select Selected;
 
 nlH : List [Html [Msg]]
     = Nil [Html [Msg]];
@@ -93,22 +83,43 @@ csH : Html [Msg] -client-> List [Html [Msg]] -client-> List [Html [Msg]]
 csA : Attr [Msg] -client-> List [Attr [Msg]] -client-> List [Attr [Msg]]
     = cs [Attr [Msg]];
 
+// Page is: init x view x update x mount point (query selector e.g., #id)
+data Page = [a e]. Page a (a -client-> Html [e]) (e -client-> a -client-> a) String;
+
+data TodoItem = TodoItem String Bool Bool;
+data Model = Content String (List [TodoItem]) (Ref {server} [List [TodoItem]]);
+data Selected = All | Active | Completed;
+data Msg = Update String | Submit
+         | Toggle Int | Delete Int | Editing Int | Change Int String | Commit Int
+         | ClearCompleted | ToggleAll
+         | Select Selected;
+
+toggleEditing: {l}. TodoItem -l-> TodoItem
+          = {l}. \ti : TodoItem @ l.
+              case ti { TodoItem content done editing =>
+                TodoItem content done (if editing then False else True)
+              };
 toggleItem: {l}. TodoItem -l-> TodoItem
           = {l}. \ti : TodoItem @ l.
               case ti { TodoItem content done editing =>
                 TodoItem content (if done then False else True) editing
               };
 
+newContent: {l}. String -l-> TodoItem -l-> TodoItem
+          = {l}. \str: String @ l ti : TodoItem @ l.
+              case ti { TodoItem content done editing => TodoItem str done editing };
+
 showItem: TodoItem -client-> Int -client-> Html [Msg]
         = \item: TodoItem @ client idx: Int @ client.
             case item { TodoItem content done editing =>
-              // Element is in 'editing' mode when it is focused.
-              Element [Msg] "li" (if done then (csA (Attribute [Msg] "class" "completed") nlA) else nlA)
+              Element [Msg] "li" (csA (Attribute [Msg] "class"
+                (concat {client} (if done then "completed" else "") (if editing then "editing" else ""))
+                ) nlA)
               (csH (Element [Msg] "div" (csA (Attribute [Msg] "class" "view") nlA)
                 (csH (Element [Msg] "input" (csA (Attribute [Msg] "class" "toggle")
                                             (csA (Attribute [Msg] "type" "checkbox")
                                             (csA (onClick [Msg] (Toggle idx))
-                                            (if done then (csA (Attribute [Msg] "checked" "checked") nlA) else nlA))))
+                                            (csA (Property [Msg] "checked" (if done then "false" else "true")) nlA))))
                                             nlH)
                 (csH (Element [Msg] "label"
                   (csA (onDblClick [Msg] (Editing idx)) nlA)
@@ -118,13 +129,33 @@ showItem: TodoItem -client-> Int -client-> Html [Msg]
                                              nlA)) nlH)
                 nlH)))
               )
-              nlH)
+              (csH (Element [Msg] "input"
+                (csA (Attribute [Msg] "class" "edit")
+                (csA (Property [Msg] "value" content)
+                (csA (onInput [Msg] (Change idx))
+                (csA (onEnter [Msg] (Commit idx))
+                (csA (onBlur [Msg] (Commit idx))
+                nlA)))))
+                nlH)
+              nlH))
             };
 
 showList: List [TodoItem] -client-> Html [Msg]
         = \items: List [TodoItem] @ client.
-            Element [Msg] "ul" (csA (Attribute [Msg] "class" "todo-list") nlA)
-                (mapWithCount {client client} [TodoItem (Html [Msg])] 0 showItem items);
+          Element [Msg] "section"
+            (csA (Attribute [Msg] "class" "main")
+            (csA (Attribute [Msg] "style" "display; block")
+            nlA))
+            (csH (Element [Msg] "input"
+              (csA (Attribute [Msg] "id" "toggle-all")
+              (csA (Attribute [Msg] "class" "toggle-all")
+              (csA (Attribute [Msg] "type" "checkbox")
+              (csA (onClick [Msg] ToggleAll)
+              nlA)))) nlH)
+            (csH (Element [Msg] "label" (csA (Attribute [Msg] "for" "toggle-all") nlA) nlH)
+            (csH (Element [Msg] "ul" (csA (Attribute [Msg] "class" "todo-list") nlA)
+                (mapWithCount {client client} [TodoItem (Html [Msg])] 0 showItem items))
+            nlH)));
 
 
 header : String -client-> Html [Msg]
@@ -218,22 +249,37 @@ update : Msg -client-> Model -client-> Model
                   ref := {server} [List [TodoItem]]
                     (filter {client} [TodoItem] isNotDone (! {server} [List [TodoItem]] ref))
                 ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
-              // FIXME Add Toggle All
+
+              ToggleAll =>
+                case (((\x: Unit @ server.
+                  ref := {server} [List [TodoItem]]
+                    (map {server server} [TodoItem TodoItem] (toggleItem {server}) (! {server} [List [TodoItem]] ref))
+                ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
 
               Select selected =>
                 case selected {
                   All => Content line (! {server} [List [TodoItem]] ref) ref;
                   Active => Content line (filter {client} [TodoItem] isNotDone (! {server} [List [TodoItem]] ref)) ref;
                   Completed => Content line (filter {client} [TodoItem] isDone (! {server} [List [TodoItem]] ref)) ref
-                }
+                };
 
-//             Editing idx =>
-//               case (((\x: Unit @ server.
-//                 ref := {server} [List [TodoItem]]
-//                   (mapOnIndex {server server} [TodoItem] idx (???) visibleList)
-//               ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
+              Editing idx =>
+                case (((\x: Unit @ server.
+                  ref := {server} [List [TodoItem]]
+                    (mapOnIndex {server server} [TodoItem] idx (toggleEditing {server}) visibleList)
+                ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
 
-              // FIXME Add Double click on index
+              Commit idx =>
+                case (((\x: Unit @ server.
+                  ref := {server} [List [TodoItem]]
+                    (mapOnIndex {server server} [TodoItem] idx (toggleEditing {server}) visibleList)
+                ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref };
+
+              Change idx str =>
+                case (((\x: Unit @ server.
+                  ref := {server} [List [TodoItem]]
+                    (mapOnIndex {server server} [TodoItem] idx (newContent {server} str) visibleList)
+                ) ()), model) { (u, m) => Content line (! {server} [List [TodoItem]] ref) ref }
           }};
 
 
