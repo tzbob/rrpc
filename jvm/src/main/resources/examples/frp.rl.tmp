@@ -1,0 +1,24 @@
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+// Arrow for function types                                                   //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+type Time = Int ;
+
+data Stream = {l}. [a].  Nil | Cons a (Unit -l-> Stream {l} [a]) ;
+
+type B = {l}. [a]. Time -l-> a ;
+type E = {l}. [a]. Stream {l} [(Time, a)] ;
+
+time : {l}. B {l} [Time]
+     = id {l} ;
+
+send : {l1 l2}. [a]. B {l1} [a] -l2-> B {l2} [a]
+     = \beh: Time -l1-> a @ l2.
+         \t: Time @ l2. beh (delay_inv {l1 l2} t)
+
+send : {l1 l2}. [a]. E {l1} [a] -l2-> E {l2} [a]
+     = \ev: Stream {l1} [(Time, a)] @ l2.
+         map {l2 l2} (\(t, a) @ l2. (delay {l1 l2} t, a)) (loc_to_loc {l1 l2} ev)
