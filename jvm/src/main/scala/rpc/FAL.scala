@@ -10,15 +10,15 @@ object FAL extends App {
   type Time = Long
 
   case class Behavior[A](
-      impl: (LazyList[Option[Action]], LazyList[Time]) => LazyList[A])
+      impl: (LazyList[(Option[Action], Time)]) => LazyList[A])
 
   object Behavior {
     def const[A](a: A): Behavior[A] =
-      Behavior((_, _) => LazyList.continually(a))
+      Behavior((_) => LazyList.continually(a))
 
     def ap[A, B](bf: Behavior[A => B], bp: => Behavior[A]): Behavior[B] = {
-      Behavior { (actions, time) =>
-        bp.impl(actions, time).zip(bf.impl(actions, time)).map {
+      Behavior { (input) =>
+        bp.impl(input).zip(bf.impl(input)).map {
           case (a, f) =>
             f(a)
         }
@@ -29,39 +29,36 @@ object FAL extends App {
       Behavior.ap(const(f), b)
 
     def snapshot[A, B](b: Behavior[A], e: Event[B]): Event[(A, B)] =
-      Event(Behavior { (actions, times) =>
-        lazy val x: LazyList[Option[B]] = e.b.impl(actions, times)
-        lazy val y: LazyList[A]         = b.impl(actions, times)
+      Event(Behavior { (input) =>
+        lazy val x: LazyList[Option[B]] = e.b.impl(input)
+        lazy val y: LazyList[A]         = b.impl(input)
         x.zip(y).map {
           case (opt, a) =>
             opt.map(a -> _)
         }
       })
 
-    def switch[A](b: => Behavior[A],
-                  switcher: => Event[Behavior[A]]): Behavior[A] = {
-      Behavior { (actions, times) =>
-        def loop(actions: LazyList[Option[Action]],
-                 times: LazyList[Time],
-                 events: => LazyList[Option[Behavior[A]]],
-                 behaviors: => LazyList[A]): LazyList[A] =
-          behaviors.head #:: loop(actions.tail,
-                                  times.tail,
-                                  events.tail,
-                                  events.head match {
-                                    case Some(Behavior(sImpl)) =>
-                                      sImpl(actions.tail, times.tail)
-                                    case None => behaviors.tail
-                                  })
+    // switch implementation
+//    def switch[A](b: => Behavior[A],
+//                  switcher: => Event[Behavior[A]]): Behavior[A] = {
+//      Behavior { (input) =>
+//        def loop(input: LazyList[(Option[Action], Time)],
+//                 events: => LazyList[Option[Behavior[A]]],
+//                 behaviors: => LazyList[A]): LazyList[A] =
+//          behaviors.head #:: loop(input.tail, events.tail, events.head match {
+//            case Some(Behavior(sImpl)) =>
+//              sImpl(input.tail)
+//            case None => behaviors.tail
+//          })
+//
+//        val bOutput      = b.impl(input)
+//        lazy val eOutput = switcher.b.impl(input)
+//        loop(input, eOutput, bOutput)
+//      }
+//    }
 
-        val bOutput = b.impl(actions, times)
-        lazy val eOutput = switcher.b.impl(actions, times)
-        loop(actions, times, eOutput, bOutput)
-      }
-    }
-
-    def time: Behavior[Time] = Behavior { (_, times) =>
-      times
+    def time: Behavior[Time] = Behavior { input =>
+      input.map(_._2)
     }
   }
 
@@ -73,29 +70,36 @@ object FAL extends App {
         optA.map(f)
       })
 
+    def union[A](e1: Event[A], e2: Event[A])(both: (A, A) => A): Event[A] =
+      Event(Behavior { input =>
+        e1.b.impl(input).zip(e2.b.impl(input)).map {
+          case (Some(e1v), Some(e2v)) => Some(both(e1v, e2v))
+          case (Some(e1v), None)      => Some(e1v)
+          case (None, Some(e2v))      => Some(e2v)
+          case (None, None)           => None
+        }
+      })
+
     def filter[A](e: Event[A])(f: A => Boolean) =
-      Event(Behavior { (actions, times) =>
-        e.b.impl(actions, times).filter {
+      Event(Behavior { (input) =>
+        e.b.impl(input).filter {
           case None    => false
           case Some(a) => f(a)
         }
       })
 
-    def accum[A, Acc](e: => Event[A], start: Acc)(f: (Acc, A) => Acc) = {
-      val init = Behavior.const(start)
-      def b: Behavior[Acc] = {
-        def accumulator = Event.map(Behavior.snapshot(b, e)) {
-          case (acc, a) =>
-            Behavior.const(f(acc, a))
+    def accum[A, Acc](e: Event[A], start: Acc)(f: (Acc, A) => Acc) = {
+      Behavior { input =>
+        e.b.impl(input).scanLeft(start) {
+          case (acc, Some(a)) => f(acc, a)
+          case (acc, None)    => acc
         }
-        Behavior.switch(init, accumulator)
       }
-      b
     }
 
     def actions: Event[Action] = Event {
-      Behavior { (actions, _) =>
-        actions
+      Behavior { (input) =>
+        input.map(_._1)
       }
     }
 
@@ -138,7 +142,7 @@ object FAL extends App {
 
   println("Starting to read...")
   val program = Program.result.b.impl
-  val outcome = program(typeds, timeSource)
+  val outcome = program(typeds.zip(timeSource))
 
   for { result <- outcome } {
     result.foreach { str =>

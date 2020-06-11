@@ -6,9 +6,10 @@ import scala.io.StdIn
 object RefPull extends App {
   trait Action
   case class Typed(line: String) extends Action
+  type Time = Long
 
-  case class Behavior[A](unB: List[Action] => A, before: () => A)
-  case class Event[A](unE: List[Action] => Option[A])
+  case class Behavior[A](unB: (List[Action], Time) => A, before: () => A)
+  case class Event[A](unE: (List[Action], Time) => Option[A])
 
   def fix[A](f: (() => A) => A): A = {
     var cache: Option[A] = None
@@ -23,15 +24,25 @@ object RefPull extends App {
 
   object Event {
     def map[A, B](e: Event[A])(f: A => B): Event[B] =
-      Event(e.unE.andThen(_.map(f)))
+      Event((actions, time) => e.unE(actions, time).map(f))
 
-    def filter[A](e: Event[A])(f: A => Boolean) =
-      Event(e.unE.andThen(_.filter(f)))
+    def filter[A](e: Event[A])(f: A => Boolean): Event[A] =
+      Event((actions, time) => e.unE(actions, time).filter(f))
+
+    def union[A](e1: Event[A], e2: Event[A])(both: (A, A) => A): Event[A] =
+      Event { (actions, time) =>
+        (e1.unE(actions, time), e2.unE(actions, time)) match {
+          case (Some(e1v), Some(e2v)) => Some(both(e1v, e2v))
+          case (Some(e1v), None)      => Some(e1v)
+          case (None, Some(e2v))      => Some(e2v)
+          case (None, None)           => None
+        }
+      }
 
     def hold[A](e: Event[A], start: A): Behavior[A] = {
       var x = start
-      Behavior({ actions =>
-        e.unE(actions) match {
+      Behavior({ (actions, time) =>
+        e.unE(actions, time) match {
           case Some(a) => x = a; a
           case None    => x
         }
@@ -39,19 +50,19 @@ object RefPull extends App {
     }
 
     def accumFRecursive[A](a: A, e: Event[A => A]): Behavior[A] = {
-      fix[Behavior[A]] { b: (() => Behavior[A]) =>
+      fix { b: (() => Behavior[A]) =>
         Event.hold(Event.map(Behavior.snapshot(Behavior.delayed(b), e)) {
           case (a, f) => f(a)
         }, a)
       }
     }
 
-    // Not a primitive with delayed + fix
+    // Not a primitive with hold + delayed + fix
     def accumF[A](a: A, e: Event[A => A]): Behavior[A] = {
       var x = a
       Behavior(
-        { actions =>
-          e.unE(actions) match {
+        { (actions, time) =>
+          e.unE(actions, time) match {
             case Some(f) =>
               val old = x
               x = f(old)
@@ -70,7 +81,7 @@ object RefPull extends App {
       accumFRecursive(start, eF)
     }
 
-    def actions: Event[List[Action]] = Event { (actions) =>
+    def actions: Event[List[Action]] = Event { (actions, _) =>
       if (actions.isEmpty) None
       else Some(actions)
     }
@@ -87,33 +98,28 @@ object RefPull extends App {
   }
 
   object Behavior {
-    def pure[A](a: A): Behavior[A] = Behavior(_ => a, () => a)
-    def map[A, B](b: Behavior[A])(f: A => B): Behavior[B] =
-      Behavior({ (a) =>
-        f(b.unB(a))
-      }, () => f(b.before()))
+    def pure[A](a: A): Behavior[A] = Behavior((_, _) => a, () => a)
     def app[A, B](f: Behavior[A => B], p: Behavior[A]) =
-      Behavior({ a =>
-        f.unB(a)(p.unB(a))
+      Behavior({ (a, t) =>
+        f.unB(a, t)(p.unB(a, t))
       }, () => f.before()(p.before()))
+    def map[A, B](b: Behavior[A])(f: A => B) = app(pure(f), b)
 
+    // Is only well-defined for all behaviors created from hold or its derivatives; not for primitives
     def delayed[A](bF: () => Behavior[A]): Behavior[A] =
-      Behavior(_ => bF().before(), () => bF().before())
+      Behavior((_, _) => bF().before(), () => bF().before())
 
     def snapshot[A, B](b: Behavior[A], e: Event[B]): Event[(A, B)] =
-      Event { actions =>
-        e.unE(actions) match {
-          case Some(evValue) => Some((b.unB(actions), evValue))
+      Event { (actions, time) =>
+        e.unE(actions, time) match {
+          case Some(evValue) => Some((b.unB(actions, time), evValue))
           case None          => None
         }
       }
 
     // time is not a correct implementation
-    //   -> No memoization per logical time slot
-    //   -> This gives different values within the same logical time slot
-    //   -> Overall fix is to memoize all sources within a logical time slot
-    val time = Behavior(_ => System.currentTimeMillis(),
-                        () => System.currentTimeMillis())
+    //   -> what is the value of Time.delayed?
+    val time = Behavior((_, t) => t, () => ???)
   }
 
   object Program {
@@ -129,6 +135,8 @@ object RefPull extends App {
           s"Typed $count:$line @ $time"
       }
 
+    def testHold: Behavior[String] = Event.hold(Event.lines, "START")
+
     def diamondShape = {
       val lt: Behavior[Int => Int => Boolean] = Behavior.pure(x => y => x > y)
       val larger                              = Behavior.map(countLines)(_ + 1)
@@ -136,25 +144,26 @@ object RefPull extends App {
     }
   }
 
-  val program: List[Action] => Option[String] = Program.result.unE
+  val program: (List[Action], Time) => Option[String] = Program.result.unE
 
   @tailrec
-  def run[R](f: List[Action] => R)(quit: R => Boolean): Unit = {
+  def run[R](f: (List[Action], Time) => R)(quit: R => Boolean): Unit = {
     println("Starting to read...")
-    val result = f(List(Typed(StdIn.readLine())))
+    val result = f(List(Typed(StdIn.readLine())), System.currentTimeMillis())
     if (quit(result)) System.exit(1)
     println(result)
     run(f)(quit)
   }
 
-  run(Program.result.unE) { case Some(str: String) => str.contains("quit") }
+//  run(Program.result.unE) { case Some(str: String) => str.contains("quit") }
+//  run(Program.diamondShape.unB)(_ == false) // runs forever!
 
-//  run(Program.diamondShape.unB)(_ == false)
+  val lines = Program.testHold.unB
 
-//  val lines = Program.countLines.unB
-//
-//  "as".foreach { char =>
-//    val result = lines(List(Typed(char.toString)))
-//    println(result)
-//  }
+  "asd".foreach { char =>
+    val result = lines(List(Typed(char.toString)), System.currentTimeMillis())
+    println(result)
+  }
+
+  println(lines(List.empty, System.currentTimeMillis()))
 }
