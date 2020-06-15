@@ -3,7 +3,7 @@ package rpc
 import scala.annotation.tailrec
 import scala.io.StdIn
 
-object RefPull extends App {
+trait RefPull extends App {
   trait Action
   case class Typed(line: String) extends Action
   type Time = Long
@@ -147,7 +147,7 @@ object RefPull extends App {
   val program: (List[Action], Time) => Option[String] = Program.result.unE
 
   @tailrec
-  def run[R](f: (List[Action], Time) => R)(quit: R => Boolean): Unit = {
+  final def run[R](f: (List[Action], Time) => R)(quit: R => Boolean): Unit = {
     println("Starting to read...")
     val result = f(List(Typed(StdIn.readLine())), System.currentTimeMillis())
     if (quit(result)) System.exit(1)

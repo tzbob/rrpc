@@ -1,6 +1,6 @@
 package rpc
 
-object SimpleFirstOrder extends App {
+trait SimpleFirstOrder extends App {
   trait Action
   case class Typed(line: String) extends Action
 

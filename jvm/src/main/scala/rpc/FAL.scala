@@ -2,7 +2,7 @@ package rpc
 
 import scala.io.StdIn
 
-object FAL extends App {
+trait FAL extends App {
 
   trait Action
   case class Typed(line: String) extends Action
