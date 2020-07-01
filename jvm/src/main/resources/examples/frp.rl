@@ -33,8 +33,6 @@ data In = {l}. In (Option [Action]) (Time {l});
 
 actTime : {l}. In {l} -l-> (Option [Action], Time {l})
 = {l}. \in: In {l} @ l. case in { In action time => (action, time) };
-//doRemote : {l}. In {l} -l-> Bool
-//= {l}. \in: In {l} @ l. case in { In action time remote => remote };
 
 // ToServer contains functions that will update all 'ToServer' server values properly.
 data ToServer = ToServer
@@ -54,16 +52,23 @@ data Event = {l}. [a]. Event (List [ToServer]) (List [ToClient]) (In {l} -l-> Op
 
 // FIXME: Needs memo1 on all Behavior / Event creations to make sure there are
 //    no duplicate computations (important because of side effects!)
-//memo1: {l}. [a b]. (a -l-> b) -l-> a -l-> b
-//= {l}. [a b].
-//  \f: (a -l-> b) @ l a: a @ l.
-//    let { cache: Option [(a, b)] = ref {l} [Option [(a, b)]] start }
-//      case ! {l} [Option [(a, b)]] cache {
-//        Some ab =>
-//          if ()
-//        None =>
-//      }
-//    end
+memo1: {l}. [a b]. (a -l-> b) -l-> a -l-> b
+= {l}. [a b].
+  \f: (a -l-> b) @ l a: a @ l.
+    let { cache: Ref {l} [Option [(a, b)]] = ref {l} [Option [(a, b)]] (None [(a, b)]) }
+      let { miss: a -l-> b = \missedA: a @ l.
+        let { b: b = f a }
+          let { ignore: Unit = cache := {l} [Option [(a, b)]] (Some [(a, b)] ((a, b))) }
+            b
+          end
+        end
+      }
+        case ! {l} [Option [(a, b)]] cache {
+          Some ab => case ab { (ca, cb) => if (a == ca) then cb else miss a };
+          None => miss a
+        }
+      end
+    end;
 //
 //    case (, 0) {
 //      (cache, i) =>
@@ -387,7 +392,6 @@ loop : Event {client} [String] -client-> Unit
               }) (eToS {client} [String] ev)
             }
               let { ignore: Unit =
-                // if any ToServer events were pushed, recompute the main program
                 if any {client} isSets then
                   // Increase server time & push all ToClients TODO: fix time, this is a race condition in an asynchronous server!
                   let { ignore: List [Bool] =
