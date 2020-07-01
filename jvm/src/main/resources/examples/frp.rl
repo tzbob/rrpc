@@ -2,19 +2,73 @@ data Action = Typed String;
 data Time = {l}. T Int;
 
 data List = [a]. Nil | Cons a (List [a]) ;
+
+any : {l}. List [Bool] -l-> Bool
+    = {l}.
+      \xs: List [Bool] @ l. case xs {
+        Nil => False;
+        Cons t xss => if t then t else any {l} xss
+      };
+
+merge : {l}. [a]. List [a] -l-> List [a] -l-> List [a]
+    = {l}. [a].
+      \xs: List [a] @ l ys: List [a] @ l .
+        case xs {
+         Nil => ys;
+         Cons x xss => merge {l} [a] xss (Cons [a] x ys)
+        };
+
+map : {l1 l2}. [a b]. (a -l1-> b) -l2-> List [a] -l2-> List [b]
+    = {l1 l2}. [a b].
+      \f: a -l1-> b @ l2 xs: List [a] @ l2 .
+        case xs {
+         Nil => Nil [b];
+         Cons y ys => Cons [b] (f y) (map {l1 l2} [a b] f ys)
+        };
+
 data Option = [a]. None | Some a ;
 
-data Behavior = {l}. [a]. Behavior ((Option [Action], Time {l}) -l-> a);
-data Event = {l}. [a]. Event ((Option [Action], Time {l}) -l-> Option [a]);
+// action x time x remotes
+data In = {l}. In (Option [Action]) (Time {l});
+
+actTime : {l}. In {l} -l-> (Option [Action], Time {l})
+= {l}. \in: In {l} @ l. case in { In action time => (action, time) };
+//doRemote : {l}. In {l} -l-> Bool
+//= {l}. \in: In {l} @ l. case in { In action time remote => remote };
+
+// ToServer contains functions that will update all 'ToServer' server values properly.
+data ToServer = ToServer
+  (In {client} -client-> Bool)
+  (Unit -client-> Unit)
+;
+
+data ToClient = ToClient
+  (In {server} -server-> Bool)
+  (Unit -server-> Unit)
+;
+
+// Behavior : tos x toc x impl x epoch value
+data Behavior = {l}. [a]. Behavior (List [ToServer]) (List [ToClient]) (In {l} -l-> a) a;
+// Event : tos x toc x impl
+data Event = {l}. [a]. Event (List [ToServer]) (List [ToClient]) (In {l} -l-> Option [a]);
 
 // FIXME: Needs memo1 on all Behavior / Event creations to make sure there are
 //    no duplicate computations (important because of side effects!)
 //memo1: {l}. [a b]. (a -l-> b) -l-> a -l-> b
-//= {l}. [a b]. \f: (a -l-> b) @ l a: a @ l.
-//    case (ref {l} [Option [(a, b)]] start, 0) {
+//= {l}. [a b].
+//  \f: (a -l-> b) @ l a: a @ l.
+//    let { cache: Option [(a, b)] = ref {l} [Option [(a, b)]] start }
+//      case ! {l} [Option [(a, b)]] cache {
+//        Some ab =>
+//          if ()
+//        None =>
+//      }
+//    end
+//
+//    case (, 0) {
 //      (cache, i) =>
 //        (cache := {client} [Option [(a, b)]] (Some [(a, b)]
-//    }
+//    };
 
 //def memo1[A, B](f: A => B): A => B = {
 //  var cache: Option[(A, B)] = None
@@ -30,18 +84,21 @@ data Event = {l}. [a]. Event ((Option [Action], Time {l}) -l-> Option [a]);
 //    }
 //}
 
-toInt: {l}. Time {l} -l-> Int
-= {l}. \t: Time {l} @ l. case t { T i => i};
-
 on: {l}. [a]. (Unit -l-> a) -l-> a
 = {l}. [a]. \f: Unit -l-> a @ l. f ();
 
-eImpl : {l}. [a]. Event {l} [a] -l-> ((Option [Action], Time {l}) -l-> Option [a])
-= {l}. [a]. \ev: Event {l} [a] @ l. case ev { Event impl => impl };
+eImpl : {l}. [a]. Event {l} [a] -l-> (In {l} -l-> Option [a])
+= {l}. [a]. \ev: Event {l} [a] @ l. case ev { Event x y impl => impl };
+
+eToS : {l}. [a]. Event {l} [a] -l-> List [ToServer]
+= {l}. [a]. \ev: Event {l} [a] @ l. case ev { Event tos x y => tos };
+
+eToC : {l}. [a]. Event {l} [a] -l-> List [ToClient]
+= {l}. [a]. \ev: Event {l} [a] @ l. case ev { Event x toc y => toc };
 
 eMap : {l}. [a b]. (a -l-> b) -l-> Event {l} [a] -l-> Event {l} [b]
 = {l}. [a b]. \f: (a -l-> b) @ l ev: Event {l} [a] @ l.
-    Event {l} [b] (\in: (Option [Action], Time {l}) @ l.
+    Event {l} [b] (eToS {l} [a] ev) (eToC {l} [a] ev) (\in: In {l} @ l.
       case (eImpl {l} [a] ev) in {
         None => None [b];
         Some val => Some [b] (f val)
@@ -49,7 +106,7 @@ eMap : {l}. [a b]. (a -l-> b) -l-> Event {l} [a] -l-> Event {l} [b]
 
 eFilter : {l}. [a]. (a -l-> Bool) -l-> Event {l} [a] -l-> Event {l} [a]
 = {l}. [a]. \f: (a -l-> Bool) @ l ev: Event {l} [a] @ l.
-    Event {l} [a] (\in: (Option [Action], Time {l}) @ l.
+    Event {l} [a] (eToS {l} [a] ev) (eToC {l} [a] ev) (\in: In {l} @ l.
       case (eImpl {l} [a] ev) in {
         None => None [a];
         Some a => if f a then Some [a] a else None [a]
@@ -57,22 +114,25 @@ eFilter : {l}. [a]. (a -l-> Bool) -l-> Event {l} [a] -l-> Event {l} [a]
 
 eUnion : {l}. [a]. (a -l-> a -l-> a) -l-> Event {l} [a] -l-> Event {l} [a] -l-> Event {l} [a]
 = {l}. [a]. \f: (a -l-> a -l-> a) @ l ev1: Event {l} [a] @ l ev2: Event {l} [a] @ l.
-    Event {l} [a] (\in: (Option [Action], Time {l}) @ l.
-      case (eImpl {l} [a] ev1) in {
-        None => case (eImpl {l} [a] ev2) in {
-          None => None [a];
-          Some a2 => Some [a] a2
-        };
-        Some a1 => case (eImpl {l} [a] ev2) in {
-          None => Some [a] a1;
-          Some a2 => Some [a] (f a1 a2)
-        }
-      });
+    Event {l} [a]
+      (merge {l} [ToServer] (eToS {l} [a] ev1) (eToS {l} [a] ev2))
+      (merge {l} [ToClient] (eToC {l} [a] ev1) (eToC {l} [a] ev2))
+      (\in: In {l} @ l.
+        case (eImpl {l} [a] ev1) in {
+          None => case (eImpl {l} [a] ev2) in {
+            None => None [a];
+            Some a2 => Some [a] a2
+          };
+          Some a1 => case (eImpl {l} [a] ev2) in {
+            None => Some [a] a1;
+            Some a2 => Some [a] (f a1 a2)
+          }
+        });
 
 eAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Event {l} [b])
 = {l}. [a b]. \start: b @ l f: (b -l-> a -l-> b) @ l ev: Event {l} [a] @ l.
     case (ref {l} [b] start, 0) {
-      (r, i) => Event {l} [b] (\in: (Option [Action], Time {l}) @ l.
+      (r, i) => Event {l} [b] (eToS {l} [a] ev) (eToC {l} [a] ev) (\in: In {l} @ l.
         case (eImpl {l} [a] ev) in {
           None => None [b];
           Some a => case (r := {l} [b] (f (! {l} [b] r) a), 0) {
@@ -85,24 +145,28 @@ eAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Event {l}
 bAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Behavior {l} [b])
 = {l}. [a b]. \start: b @ l f: (b -l-> a -l-> b) @ l ev: Event {l} [a] @ l.
     case (ref {l} [b] start, 0) {
-      (r, i) => Behavior {l} [b] (\in: (Option [Action], Time {l}) @ l.
-        case (eImpl {l} [a] ev) in {
-          None => ! {l} [b] r;
-          Some a => case (r := {l} [b] (f (! {l} [b] r) a), 0) {
-            (i, j) => ! {l} [b] r
+      (r, i) => Behavior {l} [b]
+        (eToS {l} [a] ev)
+        (eToC {l} [a] ev)
+        (\in: In {l} @ l.
+          case (eImpl {l} [a] ev) in {
+            None => ! {l} [b] r;
+            Some a => case (r := {l} [b] (f (! {l} [b] r) a), 0) {
+              (i, j) => ! {l} [b] r
+            }
           }
-        }
-      )
+        )
+        start
     };
 
 actions : {l}. Event {l} [Action]
-= {l}. Event {l} [Action] (\in: (Option [Action], Time {l}) @ l.
-  case in { (actionOpt, t) => actionOpt }
+= {l}. Event {l} [Action] (Nil [ToServer]) (Nil [ToClient]) (\in: In {l} @ l.
+  case in { In actionOpt t => actionOpt }
 );
 
 lines : {l}. Event {l} [String]
-= {l}. Event {l} [String] (\in: (Option [Action], Time {l}) @ l.
-  case in { (actionOpt, t) => case actionOpt {
+= {l}. Event {l} [String] (Nil [ToServer]) (Nil [ToClient]) (\in: In {l} @ l.
+  case in { In actionOpt t => case actionOpt {
     None => None [String];
     Some action => case action {
       Typed str => Some [String] str
@@ -111,39 +175,49 @@ lines : {l}. Event {l} [String]
 );
 
 // Behavior implementation
-bImpl : {l}. [a]. Behavior {l} [a] -l-> ((Option [Action], Time {l}) -l-> a)
-= {l}. [a]. \ev: Behavior {l} [a] @ l. case ev { Behavior impl => impl };
+bImpl : {l}. [a]. Behavior {l} [a] -l-> (In {l} -l-> a)
+= {l}. [a]. \ev: Behavior {l} [a] @ l. case ev { Behavior x y impl e => impl };
+
+bToS : {l}. [a]. Behavior {l} [a] -l-> List [ToServer]
+= {l}. [a]. \ev: Behavior {l} [a] @ l. case ev { Behavior tos x y e => tos };
+
+bToC : {l}. [a]. Behavior {l} [a] -l-> List [ToClient]
+= {l}. [a]. \ev: Behavior {l} [a] @ l. case ev { Behavior x toc y e => toc };
+
+bEpoch : {l}. [a]. Behavior {l} [a] -l-> a
+= {l}. [a]. \ev: Behavior {l} [a] @ l. case ev { Behavior x toc y e => e };
 
 bPure : {l}. [a]. a -l-> Behavior {l} [a]
-= {l}. [a]. \a: a @ l. Behavior {l} [a] (\in: (Option [Action], Time {l}) @ l. a);
+= {l}. [a]. \a: a @ l. Behavior {l} [a] (Nil [ToServer]) (Nil [ToClient]) (\in: In {l} @ l. a) a;
 
 bApp : {l}. [a b]. Behavior {l} [a -l-> b] -l-> Behavior {l} [a] -l-> Behavior {l} [b]
 = {l}. [a b]. \fb: Behavior {l} [a -l-> b] @ l pb: Behavior {l} [a] @ l.
-    Behavior {l} [b] (\in: (Option [Action], Time {l}) @ l.
-      ((bImpl {l} [a -l-> b] fb) in) ((bImpl {l} [a] pb) in)
-    );
+    Behavior {l} [b]
+      (merge {l} [ToServer] (bToS {l} [a -l-> b] fb) (bToS {l} [a] pb))
+      (merge {l} [ToClient] (bToC {l} [a -l-> b] fb) (bToC {l} [a] pb))
+      (\in: In {l} @ l. ((bImpl {l} [a -l-> b] fb) in) ((bImpl {l} [a] pb) in))
+      ((bEpoch {l} [a -l-> b] fb) (bEpoch {l} [a] pb));
 
 bSnap : {l}. [a b]. Event {l} [a] -l-> Behavior {l} [b] -l-> Event {l} [(a, b)]
 = {l}. [a b]. \ae: Event {l} [a] @ l bb: Behavior {l} [b] @ l.
-    Event {l} [(a, b)] (\in: (Option [Action], Time {l}) @ l.
+    Event {l} [(a, b)]
+      (merge {l} [ToServer] (eToS {l} [a] ae) (bToS {l} [b] bb))
+      (merge {l} [ToClient] (eToC {l} [a] ae) (bToC {l} [b] bb))
+      (\in: In {l} @ l.
         case (eImpl {l} [a] ae) in {
           None => None [(a, b)];
           Some a => Some [(a, b)] ((a, ((bImpl {l} [b] bb) in)))
         }
-    );
+      );
 
 // cross-tier implementation
+toInt: {l}. Time {l} -l-> Int
+= {l}. \t: Time {l} @ l. case t { T i => i};
 
 st: Ref {server} [Int] = ref {server} [Int] 0;
 incSt: Unit -server-> Int
 = \unit: Unit @ server. case (st := {server} [Int] (! {server} [Int] st) + 1, 0) {
   (i, j) => ! {server} [Int] st
-};
-toServerTime: Time {client} -server-> Time {server}
-= \tc: Time {client} @ server. T {server} (incSt ());
-toServerInput: (Option [Action], Time {client}) -server-> (Option [Action], Time {server})
-= \inC: (Option [Action], Time {client}) @ server. case inC {
-    (ac, tc) => (ac, toServerTime tc)
 };
 
 ct: Ref {client} [Int] = ref {client} [Int] 0;
@@ -151,21 +225,23 @@ incCt: Unit -client-> Int
 = \unit: Unit @ client. case (ct := {client} [Int] (! {client} [Int] ct) + 1, 0) {
   (i, j) => ! {client} [Int] ct
 };
-toClientTime: Time {server} -client-> Time {client}
-= \tc: Time {server} @ client. T {client} (incCt ());
-toClientInput: (Option [Action], Time {server}) -client-> (Option [Action], Time {client})
-= \in: (Option [Action], Time {server}) @ client. case in {
-    (ac, t) => (ac, toClientTime t)
-};
 
 sTime : Behavior {server} [Time {server}]
-= Behavior {server} [Time {server}] (\in: (Option [Action], Time {server}) @ server.
-  case in { (actionOpt, t) => T {server} (! {server} [Int] st) }
-);
+= Behavior {server} [Time {server}]
+    (Nil [ToServer])
+    (Nil [ToClient])
+    (\in: In {server} @ server.
+      case in { In actionOpt t => T {server} (! {server} [Int] st) }
+    )
+    (T {server} 0);
 cTime : Behavior {client} [Time {client}]
-= Behavior {client} [Time {client}] (\in: (Option [Action], Time {client}) @ client.
-  case in { (actionOpt, t) => T {client} (! {client} [Int] ct) }
-);
+= Behavior {client} [Time {client}]
+    (Nil [ToServer])
+    (Nil [ToClient])
+    (\in: In {client} @ client.
+      case in { In actionOpt t => T {client} (! {client} [Int] ct) }
+    )
+    (T {client} 0);
 
 // Can't write this without pattern matching on locations
 //time : {l}. Behavior {l} [Time {l}]
@@ -173,25 +249,82 @@ cTime : Behavior {client} [Time {client}]
 //  case in { (actionOpt, t) => t }
 //);
 
-eServer: [a]. Event {client} [a] -server-> Event {server} [a]
-= [a]. \evc: Event {client} [a] @ server.
-    Event {server} [a] (\in: (Option [Action], Time {server}) @ server.
-      (eImpl {client} [a] evc) (toClientInput in));
+eSetter: {l1 l2}. [a]. Event {l1} [a] -l1-> (Ref {l2} [Option [a]], In {l1} -l1-> Bool, Unit -l1-> Unit)
+= {l1 l2}. [a]. \evs: Event {l1} [a] @ l1.
+  let { r: Ref {l2} [Option [a]] = ref {l2} [Option [a]] (None [a]) }
+    let { set: In {l1} -l1-> Bool = (\in: In {l1} @ l1.
+       case (eImpl {l1} [a] evs) in {
+         Some aV =>
+           let { ignore: Unit = r := {l2} [Option [a]] (Some [a] aV) }
+             True
+           end;
+         None => False
+       }
+    )}
+      let { reset: Unit -l1-> Unit = (\u: Unit @ l1. r := {l2} [Option [a]] (None [a])) }
+        (r, set, reset)
+      end
+    end
+  end;
 
-eClient: [a]. Event {server} [a] -client-> Event {client} [a]
-= [a]. \evc: Event {server} [a] @ client.
-    Event {client} [a] (\in: (Option [Action], Time {client}) @ client.
-      (eImpl {server} [a] evc) (toServerInput in));
+eToServer: [a]. Event {client} [a] -client-> Event {server} [a]
+= [a]. \evc: Event {client} [a] @ client. case eSetter {client server} [a] evc {
+  (r, set, reset) =>
+    Event {server} [a]
+      (Cons [ToServer] (ToServer set reset) (eToS {client} [a] evc))
+      (eToC {client} [a] evc)
+      (\in: In {server} @ server. ! {server} [Option [a]] r)
+};
 
-bServer: [a]. Behavior {client} [a] -server-> Behavior {server} [a]
-= [a]. \bc: Behavior {client} [a] @ server.
-    Behavior {server} [a] (\in: (Option [Action], Time {server}) @ server.
-      (bImpl {client} [a] bc) (toClientInput in));
+eToClient: [a]. Event {server} [a] -client-> Event {client} [a]
+= [a]. \evs: Event {server} [a] @ client. case eSetter {server client} [a] evs {
+  (r, set, reset) =>
+    Event {client} [a]
+      (eToS {server} [a] evs)
+      (Cons [ToClient] (ToClient set reset) (eToC {server} [a] evs))
+      (\in: In {client} @ client. ! {client} [Option [a]] r)
+};
 
-bClient: [a]. Behavior {server} [a] -client-> Behavior {client} [a]
-= [a]. \b: Behavior {server} [a] @ client.
-    Behavior {client} [a] (\in: (Option [Action], Time {client}) @ client.
-      (bImpl {server} [a] b) (toServerInput in));
+bSetter: {l1 l2}. [a]. Behavior {l1} [a] -l1-> (Ref {l2} [a], In {l1} -l1-> Bool, Unit -l1-> Unit)
+= {l1 l2}. [a]. \b: Behavior {l1} [a] @ l1.
+  let { r: Ref {l2} [a] = ref {l2} [a] (bEpoch {l1} [a] b) }
+    let { set: In {l1} -l1-> Bool = (\in: In {l1} @ l1.
+      let { ignore: Unit = r := {l2} [a] ((bImpl {l1} [a] b) in) }
+        True
+      end
+    )}
+      let { reset: Unit -l1-> Unit = (\u: Unit @ l1. ()) }
+        (r, set, reset)
+      end
+    end
+  end;
+
+bToServer: [a]. Behavior {client} [a] -client-> Behavior {server} [a]
+= [a]. \bc: Behavior {client} [a] @ client. case bSetter {client server} [a] bc {
+  (r, set, reset) =>
+    Behavior {server} [a]
+      // behaviors don't reset, they retain the previous value: TODO check if this breaks continuity model
+      (Cons [ToServer] (ToServer set reset) (bToS {client} [a] bc))
+      (bToC {client} [a] bc)
+      (\in: In {server} @ server. ! {server} [a] r)
+      (bEpoch {client} [a] bc)
+};
+
+bToClient: [a]. Behavior {server} [a] -client-> Behavior {client} [a]
+= [a]. \bs: Behavior {server} [a] @ client. case bSetter {server client} [a] bs {
+  (r, set, reset) =>
+    Behavior {client} [a]
+      (bToS {server} [a] bs)
+      (Cons [ToClient] (ToClient set reset) (bToC {server} [a] bs))
+      (\in: In {client} @ client. ! {client} [a] r)
+      (bEpoch {server} [a] bs)
+};
+
+//
+//
+//  Program
+//
+//
 
 // 1st timed lines
 
@@ -205,7 +338,7 @@ timedLines : Event {client} [String]
 // server counter -> fold + print
 
 sTimedLines: Event {server} [String]
-= eServer [String] timedLines;
+= eToServer [String] timedLines;
 
 serverCount : Behavior {server} [Int]
 = bAccum {server} [String Int]
@@ -229,33 +362,68 @@ timedCountTimedLines : Event {client} [String]
       }
     })
     (bSnap {client} [(String, Int) (Time {client})]
-      (bSnap {client} [String Int] timedLines (bClient [Int] serverCount))
+      (bSnap {client} [String Int] timedLines (bToClient [Int] serverCount))
       cTime);
 
-loop : Unit -client-> Unit
-= \u: Unit @ client.
+
+//
+//
+//  Runner
+//
+//
+
+loop : Event {client} [String] -client-> Unit
+= \ev: Event {client} [String] @ client.
     case (Some [Action] (Typed (read {client} ())), incCt ()) {
-      (act, t) => case (eImpl {client} [String] timedCountTimedLines) ((act, T {client} t)) {
-        Some result => case (0, print {client} result) {
-          (x, y) => loop ()
-        }
+      // Increase client time & execute the main FRP program
+      (act, t) => case (eImpl {client} [String] ev) (In {client} act (T {client} t)) {
+        Some result =>
+          // Print the result from the first execution
+          let { ignore: Unit = print {client} result }
+            // Push all ToServers
+            let { isSets: List [Bool] =
+              map {client client} [ToServer Bool] (\tos: ToServer @ client. case tos {
+                ToServer set reset => set ((In {client} act (T {client} t)))
+              }) (eToS {client} [String] ev)
+            }
+              let { ignore: Unit =
+                // if any ToServer events were pushed, recompute the main program
+                if any {client} isSets then
+                  // Increase server time & push all ToClients TODO: fix time, this is a race condition in an asynchronous server!
+                  let { ignore: List [Bool] =
+                    map {server server} [ToClient Bool] (\toc: ToClient @ server. case toc {
+                      ToClient set reset => set ((In {server} act (T {server} (incSt ()))))
+                    }) (eToC {client} [String] ev)
+                  }
+                    // Increase client time & print new results
+                    case (eImpl {client} [String] ev) (In {client} (None [Action]) (T {client} (incCt ()))) {
+                      Some result => print {client} result;
+                      None => ()
+                    }
+                  end
+                else ()
+              }
+                // reset all
+                let { ignore: List [Unit] =
+                  map {client client} [ToServer Unit] (\tos: ToServer @ client. case tos {
+                    ToServer set reset => reset ()
+                  }) (eToS {client} [String] ev)
+                }
+                  let { ignore: List [Unit] =
+                    map {server server} [ToClient Unit] (\toc: ToClient @ server. case toc {
+                      ToClient set reset => reset ()
+                    }) (eToC {client} [String] ev)
+                  }
+                    loop ev
+                  end
+                end
+              end
+            end
+          end;
+        None => ()
       }
     };
 
-main : Unit = loop ()
+//main : Unit = 5;
 
-
-// program
-
-//  def timedLines = Behavior.snapshot(Behavior.time, Event.lines)
-//
-//  def countLines = Event.accum(Event.lines, 0) { (acc, _) =>
-//    acc + 1
-//  }
-//
-//  def result: Event[String] =
-//    Event.map(Behavior.snapshot(countLines, timedLines)) {
-//      case (count, (time, line)) =>
-//        s"Typed $count:$line @ $time"
-//    }
-
+main : Unit = loop timedCountTimedLines
