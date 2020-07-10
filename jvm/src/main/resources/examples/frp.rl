@@ -49,15 +49,13 @@ data ToClient = ToClient
 data Behavior = {l}. [a]. Behavior (List [ToServer]) (List [ToClient]) (In {l} -l-> a) a;
 behavior: {l}. [a]. List [ToServer] -client-> List [ToClient] -client-> (In {l} -l-> a) -client-> a -client-> Behavior {l} [a]
 = {l}. [a]. \tos: List [ToServer] @ client toc: List [ToClient] @ client f: (In {l} -l-> a) @ client epoch: a @ client.
-  Behavior {l} [a] tos toc f epoch;
+  Behavior {l} [a] tos toc (memo1 {l} {l} [a] f) epoch;
 // Event : tos x toc x impl
 data Event = {l}. [a]. Event (List [ToServer]) (List [ToClient]) (In {l} -l-> Option [a]);
 event: {l}. [a]. List [ToServer] -client-> List [ToClient] -client-> (In {l} -l-> Option [a]) -client-> Event {l} [a]
 = {l}. [a]. \tos: List [ToServer] @ client toc: List [ToClient] @ client f: (In {l} -l-> Option [a]) @ client.
-  Event {l} [a] tos toc f;
+  Event {l} [a] tos toc (memo1 {l} {l} [Option [a]] f);
 
-// FIXME: Needs memo1 on all Behavior / Event creations to make sure there are
-//    no duplicate computations (important because of side effects!)
 memo1: {l1 l2}. [b]. (In {l1} -l2-> b) -l2-> In {l1} -l2-> b
 = {l1 l2}. [b].
   \f: (In {l1} -l2-> b) @ l2 in: In {l1} @ l2.
@@ -136,23 +134,6 @@ eAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Event {l}
       )
     };
 
-bAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Behavior {l} [b])
-= {l}. [a b]. \start: b @ l f: (b -l-> a -l-> b) @ l ev: Event {l} [a] @ l.
-    case (ref {l} [b] start, 0) {
-      (r, i) => behavior {l} [b]
-        (eToS {l} [a] ev)
-        (eToC {l} [a] ev)
-        (\in: In {l} @ l.
-          case (eImpl {l} [a] ev) in {
-            None => ! {l} [b] r;
-            Some a => case (r := {l} [b] (f (! {l} [b] r) a), 0) {
-              (i, j) => ! {l} [b] r
-            }
-          }
-        )
-        start
-    };
-
 actions : {l}. Event {l} [Action]
 = {l}. event {l} [Action] (Nil [ToServer]) (Nil [ToClient]) (\in: In {l} @ l.
   case in { In actionOpt t => actionOpt }
@@ -191,6 +172,23 @@ bApp : {l}. [a b]. Behavior {l} [a -l-> b] -l-> Behavior {l} [a] -l-> Behavior {
       (merge {l} [ToClient] (bToC {l} [a -l-> b] fb) (bToC {l} [a] pb))
       (\in: In {l} @ l. ((bImpl {l} [a -l-> b] fb) in) ((bImpl {l} [a] pb) in))
       ((bEpoch {l} [a -l-> b] fb) (bEpoch {l} [a] pb));
+
+bAccum : {l}. [a b]. (b -l-> (b -l-> a -l-> b) -l-> Event {l} [a] -l-> Behavior {l} [b])
+= {l}. [a b]. \start: b @ l f: (b -l-> a -l-> b) @ l ev: Event {l} [a] @ l.
+    case (ref {l} [b] start, 0) {
+      (r, i) => behavior {l} [b]
+        (eToS {l} [a] ev)
+        (eToC {l} [a] ev)
+        (\in: In {l} @ l.
+          case (eImpl {l} [a] ev) in {
+            None => ! {l} [b] r;
+            Some a => case (r := {l} [b] (f (! {l} [b] r) a), 0) {
+              (i, j) => ! {l} [b] r
+            }
+          }
+        )
+        start
+    };
 
 bSnap : {l}. [a b]. Event {l} [a] -l-> Behavior {l} [b] -l-> Event {l} [(a, b)]
 = {l}. [a b]. \ae: Event {l} [a] @ l bb: Behavior {l} [b] @ l.
