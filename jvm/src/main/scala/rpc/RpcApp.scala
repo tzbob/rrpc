@@ -36,7 +36,7 @@ trait RpcApp extends RpcAppInt {
         val decoded = decode[List[TopLevel[Open.Expr]]](result)
         decoded.map { tls =>
           val headAndOrBody = apps.get(programName).getOrElse {
-            if (TopLevel.isPage(tls)) Right("", "<div id='body'></div>")
+            if (TopLevel.isPage(tls) || TopLevel.isHtml(tls)) Right("", "<div id='body'></div>")
             else Left("")
           }
           val (head, body) = headAndOrBody match {

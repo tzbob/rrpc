@@ -26,17 +26,21 @@ trait RpcApp extends RpcAppInt {
     }
 
     ioTopLevel.flatMap { top =>
+      val url = s"http://$hostname:$port"
       if (TopLevel.isPage(top)) {
         Log.logger.info(s"Starting page mode")
         ioTopLevel
-          .flatMap(
-            ClientEvaluator
-              .buildPageRun(_, s"http://$hostname:$port", appName))
+          .flatMap(ClientEvaluator.buildPageRun(_, url, appName))
+          .map(_ => ExitCode.Success)
+      } else if (TopLevel.isHtml(top)) {
+        Log.logger.info(s"Starting html mode")
+        ioTopLevel
+          .flatMap(ClientEvaluator.buildHtmlRun(_, url, appName))
           .map(_ => ExitCode.Success)
       } else {
         Log.logger.info(s"Starting value mode")
-        val env = ioTopLevel.flatMap(
-          ClientEvaluator.buildClientRun(_, s"http://$hostname:$port", appName))
+        val env =
+          ioTopLevel.flatMap(ClientEvaluator.buildClientRun(_, url, appName))
 
         env.map { x =>
           val main = x.value("main")

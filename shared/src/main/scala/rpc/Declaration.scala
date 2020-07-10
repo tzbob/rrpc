@@ -30,6 +30,15 @@ object Declaration {
           true
         case _ => false
       }
+
+
+    def isHtml(topLevels: List[TopLevel[Open.Expr]]) =
+      topLevels.lastOption match {
+        case Some(
+        Binding(Declaration.Binding("main", Tpe.Data("Html", _, _), _))) =>
+          true
+        case _ => false
+      }
   }
 
   case class Constructor(name: String, tpes: List[Tpe])

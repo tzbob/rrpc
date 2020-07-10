@@ -9,7 +9,8 @@ object Dsl {
     * @param term
     */
   implicit class TermApp(term: Expr) {
-    def apply(param: Expr, loc: Location): App = App(term, None, param, Some(loc))
+    def apply(param: Expr, loc: Location): App =
+      App(term, None, param, Some(loc))
   }
 
   // Syntax for 's.v and automatic forming of terms of symbols where possible
@@ -19,10 +20,11 @@ object Dsl {
   implicit def symbToLocVar(symbol: Char): Location.Var =
     Location.Var(symbol.toString)
 
-  val BoolTpe = Tpe.Data("Bool", Nil, Nil)
-  val IntTpe = Tpe.Data("Int", Nil, Nil)
+  val BoolTpe   = Tpe.Data("Bool", Nil, Nil)
+  val IntTpe    = Tpe.Data("Int", Nil, Nil)
   val StringTpe = Tpe.Data("String", Nil, Nil)
-  val UnitTpe = Tpe.Data("Unit", Nil, Nil)
+  val UnitTpe   = Tpe.Data("Unit", Nil, Nil)
+  val RefTpe    = Tpe.Data("Ref", List(Location.Var("l")), List(Tpe.Var("a")))
 
   // Automatic forming of constant terms
   implicit def intLit(int: Int): Literal    = Literal.Int(int)
